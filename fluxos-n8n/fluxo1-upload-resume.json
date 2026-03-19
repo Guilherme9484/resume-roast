@@ -95,8 +95,10 @@
       "parameters": {
         "dataTableId": {
           "__rl": true,
+          "value": "ArXE8s9tmJPsI1EC",
           "mode": "list",
-          "value": ""
+          "cachedResultName": "resume_roasts",
+          "cachedResultUrl": "/projects/lvog2T4fK6vD8HRh/datatables/ArXE8s9tmJPsI1EC"
         },
         "columns": {
           "mappingMode": "defineBelow",

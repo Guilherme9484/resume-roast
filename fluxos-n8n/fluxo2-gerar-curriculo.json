@@ -31,8 +31,18 @@
         "operation": "get",
         "dataTableId": {
           "__rl": true,
+          "value": "ArXE8s9tmJPsI1EC",
           "mode": "list",
-          "value": ""
+          "cachedResultName": "resume_roasts",
+          "cachedResultUrl": "/projects/lvog2T4fK6vD8HRh/datatables/ArXE8s9tmJPsI1EC"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "resume_id",
+              "keyValue": "={{ $('Code - Valida Body').first().json.resume_id }}"
+            }
+          ]
         }
       },
       "id": "f2-node-03",
@@ -40,7 +50,7 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
       "position": [440, 300],
-      "notes": "Busca o registro da análise pelo resume_id.\n⚠️ Preencha o dataTableId com o ID da tabela 'resume_roasts'.\nConfigure o filtro: campo 'resume_id' igual a {{ $json.resume_id }}"
+      "notes": "Busca o registro da análise pelo resume_id na tabela resume_roasts."
     },
     {
       "parameters": {
@@ -97,12 +107,15 @@
         "operation": "update",
         "dataTableId": {
           "__rl": true,
+          "value": "ArXE8s9tmJPsI1EC",
           "mode": "list",
-          "value": ""
+          "cachedResultName": "resume_roasts",
+          "cachedResultUrl": "/projects/lvog2T4fK6vD8HRh/datatables/ArXE8s9tmJPsI1EC"
         },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
+            "resume_id": "={{ $json.resume_id }}",
             "new_resume_generated": "={{ $json.new_resume_generated }}",
             "new_summary": "={{ $json.new_summary }}",
             "key_skills": "={{ $json.key_skills }}",
@@ -125,7 +138,7 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
       "position": [1320, 300],
-      "notes": "Atualiza o registro existente na tabela.\nmatchingColumns: resume_id (chave de busca)\n⚠️ Preencha o dataTableId com o ID da tabela 'resume_roasts'."
+      "notes": "Atualiza o registro existente na tabela resume_roasts.\nmatchingColumns: resume_id"
     },
     {
       "parameters": {
