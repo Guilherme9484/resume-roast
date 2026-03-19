@@ -1,0 +1,198 @@
+{
+  "name": "Fluxo 3 - Chat Interativo + Geração do Currículo",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "chat-node-01",
+      "name": "Webhook POST /chat",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "notes": "Body esperado (JSON):\n{\n  \"resume_id\": \"uuid-do-upload\",  // obrigatório — chave da memória\n  \"message\": \"Resposta do usuário\" // texto livre ou respostas às perguntas\n}\n\nO front chama este endpoint a cada mensagem do usuário.\nQuando o Agent terminar as perguntas, retorna { done: true, curriculo: {...} }"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst resume_id = body.resume_id;\nconst message = body.message;\n\nif (!resume_id) throw new Error('resume_id obrigatório no body.');\nif (!message || message.trim() === '') throw new Error('message não pode ser vazio.');\n\nreturn [{ json: { resume_id, message } }];"
+      },
+      "id": "chat-node-02",
+      "name": "Code - Valida Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "notes": "Valida resume_id e message.\nAmbos obrigatórios."
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "ArXE8s9tmJPsI1EC",
+          "mode": "list",
+          "cachedResultName": "resume_roasts",
+          "cachedResultUrl": "/projects/lvog2T4fK6vD8HRh/datatables/ArXE8s9tmJPsI1EC"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "resume_id",
+              "keyValue": "={{ $json.resume_id }}"
+            }
+          ]
+        }
+      },
+      "id": "chat-node-03",
+      "name": "DataTable - Busca Análise Original",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [440, 300],
+      "notes": "Busca os dados da análise original (brutal_roast, red_flags, etc.)\npara o Agent ter contexto completo ao conversar."
+    },
+    {
+      "parameters": {
+        "jsCode": "const analysis = $input.first().json;\nconst meta = $('Code - Valida Body').first().json;\n\nif (!analysis || !analysis.resume_id) {\n  throw new Error(`Análise não encontrada para resume_id: ${meta.resume_id}`);\n}\n\nconst redFlags = typeof analysis.red_flags === 'string' ? JSON.parse(analysis.red_flags) : (analysis.red_flags || []);\nconst tips = typeof analysis.improvement_tips === 'string' ? JSON.parse(analysis.improvement_tips) : (analysis.improvement_tips || []);\nconst questions = typeof analysis.questions === 'string' ? JSON.parse(analysis.questions) : (analysis.questions || []);\n\nreturn [{\n  json: {\n    resume_id: meta.resume_id,\n    message: meta.message,\n    context: {\n      employability_score: analysis.employability_score,\n      brutal_roast: analysis.brutal_roast,\n      red_flags: redFlags,\n      improvement_tips: tips,\n      rewritten_summary: analysis.rewritten_summary,\n      questions_asked: questions\n    }\n  }\n}];"
+      },
+      "id": "chat-node-04",
+      "name": "Code - Prepara Contexto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300],
+      "notes": "Monta o contexto completo da análise para o Agent.\nDeserializa arrays de strings (red_flags, tips, questions)."
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "={{ 'Você é um coach de carreira de elite conversando com um candidato para criar o currículo mais poderoso possível para ele.\\n\\nContexto da análise do currículo do candidato:\\n- Score de empregabilidade: ' + $json.context.employability_score + '/100\\n- Roast brutal: ' + $json.context.brutal_roast + '\\n- Red flags: ' + JSON.stringify($json.context.red_flags) + '\\n- Dicas de melhoria: ' + JSON.stringify($json.context.improvement_tips) + '\\n- Summary reescrito: ' + $json.context.rewritten_summary + '\\n\\nSua missão:\\n1. Fazer até 10 perguntas estratégicas ao candidato (uma ou duas por vez, de forma natural e conversacional) para entender melhor:\\n   - Conquistas concretas com números e impacto\\n   - Projetos mais relevantes já realizados\\n   - Cargo e empresa alvo\\n   - Soft skills demonstradas em situações reais\\n   - Certificações e cursos relevantes\\n   - Lacunas no histórico (se houver)\\n   - Diferenciais competitivos únicos\\n   - Preferência de trabalho (remoto/híbrido/presencial)\\n   - Expectativa salarial\\n   - Idiomas e nível\\n\\n2. Quando você tiver coletado informações suficientes (máximo 10 trocas), use a tool \\'gerar_curriculo\\' para criar o currículo final.\\n\\n3. Enquanto estiver fazendo perguntas, responda de forma direta e amigável. NÃO use JSON nas mensagens de conversa — apenas texto natural.\\n\\n4. Só use a tool \\'gerar_curriculo\\' quando tiver informações suficientes ou o candidato disser que quer gerar o currículo.' }}"
+        }
+      },
+      "id": "chat-node-05",
+      "name": "AI Agent - Chat Coach",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [880, 300],
+      "notes": "Agent conversacional com memória por resume_id.\nFaz perguntas uma a duas por vez de forma natural.\nQuando pronto, usa a tool gerar_curriculo."
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "id": "chat-node-06",
+      "name": "Groq Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [752, 500],
+      "credentials": {
+        "groqApi": {
+          "id": "rNAey3eUeDioukUT",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Code - Valida Body').first().json.resume_id }}",
+        "contextWindowLength": 5
+      },
+      "id": "chat-node-07",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [896, 500],
+      "notes": "sessionKey = resume_id — mantém o histórico da conversa por candidato.\ncontextWindowLength = 5 — últimas 5 trocas (10 mensagens)."
+    },
+    {
+      "parameters": {
+        "name": "gerar_curriculo",
+        "description": "Use esta tool quando você tiver coletado informações suficientes do candidato e estiver pronto para gerar o currículo completo e personalizado. Passe todas as informações coletadas durante a conversa.",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "fields": {
+          "values": [
+            {
+              "name": "resume_id",
+              "value": "={{ $('Code - Valida Body').first().json.resume_id }}"
+            }
+          ]
+        }
+      },
+      "id": "chat-node-08",
+      "name": "Tool - Gerar Currículo",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [1040, 500],
+      "notes": "⚠️ Preencha o workflowId com o ID do Fluxo 2 (gerar-curriculo).\nO Agent chama esta tool quando terminar as perguntas."
+    },
+    {
+      "parameters": {
+        "jsCode": "const agentOutput = $input.first().json.output || '';\n\n// Verifica se o Agent usou a tool (output contém o currículo em JSON)\nlet curriculo = null;\nlet done = false;\n\ntry {\n  const clean = agentOutput.replace(/```json|```/g, '').trim();\n  const parsed = JSON.parse(clean);\n  // Se parseou com sucesso e tem campos do currículo, é o resultado final\n  if (parsed.new_summary || parsed.key_skills) {\n    curriculo = parsed;\n    done = true;\n  }\n} catch(e) {\n  // Não é JSON — ainda está fazendo perguntas\n  done = false;\n}\n\nreturn [{\n  json: {\n    done,\n    message: done ? null : agentOutput,\n    curriculo: done ? curriculo : null\n  }\n}];"
+      },
+      "id": "chat-node-09",
+      "name": "Code - Detecta Done ou Pergunta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 300],
+      "notes": "Verifica se o Agent terminou (retornou JSON do currículo) ou ainda está fazendo perguntas.\ndone=false → devolve mensagem de texto ao front\ndone=true → devolve curriculo completo ao front"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  resume_id: $('Code - Valida Body').first().json.resume_id,\n  done: $json.done,\n  message: $json.message,\n  curriculo: $json.curriculo\n}) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "chat-node-10",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1320, 300],
+      "notes": "Resposta ao front:\n\nEnquanto conversa:\n{ done: false, message: 'Pergunta do Agent', curriculo: null }\n\nQuando termina:\n{ done: true, message: null, curriculo: { new_summary, key_skills, ... } }\n\nO front detecta done=true e exibe o modal de pagamento (Pix)."
+    }
+  ],
+  "connections": {
+    "Webhook POST /chat": {
+      "main": [[{ "node": "Code - Valida Body", "type": "main", "index": 0 }]]
+    },
+    "Code - Valida Body": {
+      "main": [[{ "node": "DataTable - Busca Análise Original", "type": "main", "index": 0 }]]
+    },
+    "DataTable - Busca Análise Original": {
+      "main": [[{ "node": "Code - Prepara Contexto", "type": "main", "index": 0 }]]
+    },
+    "Code - Prepara Contexto": {
+      "main": [[{ "node": "AI Agent - Chat Coach", "type": "main", "index": 0 }]]
+    },
+    "AI Agent - Chat Coach": {
+      "main": [[{ "node": "Code - Detecta Done ou Pergunta", "type": "main", "index": 0 }]]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [[{ "node": "AI Agent - Chat Coach", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Simple Memory": {
+      "ai_memory": [[{ "node": "AI Agent - Chat Coach", "type": "ai_memory", "index": 0 }]]
+    },
+    "Tool - Gerar Currículo": {
+      "ai_tool": [[{ "node": "AI Agent - Chat Coach", "type": "ai_tool", "index": 0 }]]
+    },
+    "Code - Detecta Done ou Pergunta": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5c28372f8539d1fc026bc6d1c9263c72b310a93650bd9ed58d2c3834b89e10ae"
+  },
+  "settings": { "executionOrder": "v1" }
+}

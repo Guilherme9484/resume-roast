@@ -1,5 +1,5 @@
 {
-  "name": "Fluxo 1 - Upload, Análise e Armazenamento",
+  "name": "Fluxo 1 - Upload, Análise e Perguntas Iniciais",
   "nodes": [
     {
       "parameters": {
@@ -8,23 +8,23 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "bb26d2bc-9cbd-448d-86bb-47e193593c0f",
-      "name": "Webhook POST /upload-resume",
+      "id": "5b733399-dc04-49ed-ba91-fbded1e48aef",
+      "name": "Webhook POST /upload-resume1",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [160, -112],
-      "webhookId": "98f11691-9815-4433-b65e-39eed13ba9bf",
-      "notes": "Recebe multipart/form-data.\nCampos esperados:\n- file: arquivo PDF (binário)\n- id: UUID gerado no front-end (ex: crypto.randomUUID())"
+      "position": [176, 624],
+      "webhookId": "c8174265-be45-4d86-8089-6713a5f055a0",
+      "notes": "Recebe multipart/form-data.\nCampos esperados:\n- file: arquivo PDF (binário)\n- id: UUID gerado no front-end via query string (?id=uuid)"
     },
     {
       "parameters": {
-        "jsCode": "const id = $input.first().json.body?.id || $input.first().json.id;\nconst binaryKey = Object.keys($input.first().binary || {})[0] || 'data';\n\nif (!id) throw new Error('Campo id não encontrado no body da requisição.');\nif (!$input.first().binary?.[binaryKey]) throw new Error('Arquivo PDF não encontrado.');\n\nreturn [{\n  json: { id, binaryKey },\n  binary: $input.first().binary\n}];"
+        "jsCode": "const id = $input.first().json.query?.id;\nconst binaryKey = Object.keys($input.first().binary || {})[0] || 'data';\n\nif (!id) throw new Error('Campo id não encontrado na query string.');\nif (!$input.first().binary?.[binaryKey]) throw new Error('Arquivo PDF não encontrado.');\n\nreturn [{\n  json: { id, binaryKey },\n  binary: $input.first().binary\n}];"
       },
-      "id": "9fb933d2-337a-4b7f-9b40-a02e02eebb1f",
-      "name": "Code - Valida id e binário",
+      "id": "b05ece35-b875-45df-916a-cd14a192fad8",
+      "name": "Code - Valida id e binário1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [384, -112],
+      "position": [400, 624],
       "notes": "Valida que o id e o PDF vieram corretamente.\nDefine qual chave binária usar no próximo nó."
     },
     {
@@ -32,25 +32,27 @@
         "operation": "pdf",
         "options": {}
       },
-      "id": "extract-pdf-node",
+      "id": "942bbd6b-303e-4f09-90bd-87bedf039e20",
       "name": "Extract from File - PDF to Text",
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
-      "position": [576, -112],
-      "notes": "Converte o PDF binário em texto puro.\nResultado disponível em $json.text\nSem custo de API — processamento local do n8n."
+      "position": [624, 624],
+      "notes": "Converte o PDF binário em texto puro.\nResultado disponível em $json.text"
     },
     {
       "parameters": {
+        "promptType": "define",
+        "text": "=Aqui está o texto completo do meu currículo:\n{{ $json.text }}\nLinguagem usada: {{ $json.info.Language }}",
         "options": {
-          "systemMessage": "You are an elite tech recruiter and career coach. You are brutally honest and have zero patience for corporate buzzwords. The user will send you the full text of a resume. Analyze it carefully and return ONLY a strict JSON (no markdown, no explanation, just the raw JSON object) with exactly these keys:\n\n1) \"employability_score\": integer from 0 to 100\n2) \"ats_rejection_chance\": integer from 0 to 100 (percentage chance of ATS rejection)\n3) \"hook_message\": one direct sentence describing the single biggest problem found\n4) \"brutal_roast\": a direct and funny paragraph exposing all the flaws of this resume\n5) \"red_flags\": array of exactly 3 strings — the worst clichés or problems found\n6) \"improvement_tips\": array of exactly 5 strings — specific and actionable tips to improve this resume\n7) \"rewritten_summary\": a perfectly optimized, ATS-friendly professional summary replacing their current one\n\nReturn ONLY the JSON. No text before or after."
+          "systemMessage": "Você é um recrutador de tecnologia de elite e coach de carreira.\nÉ brutalmente honesto e não tem paciência para buzzwords corporativos.\n\nQuando receber um currículo, analise com cuidado e retorne APENAS um JSON estrito — sem markdown, sem explicações, somente o objeto JSON puro.\n\nO JSON deve conter exatamente estas chaves:\n1. \"employability_score\": inteiro de 0 a 100\n2. \"ats_rejection_chance\": inteiro de 0 a 100 (% de chance de rejeição por ATS)\n3. \"hook_message\": uma frase direta descrevendo o maior problema encontrado\n4. \"brutal_roast\": um parágrafo direto e engraçado expondo todos os defeitos do currículo\n5. \"red_flags\": array com exatamente 3 strings — os piores clichês ou problemas encontrados\n6. \"improvement_tips\": array com exatamente 5 strings — dicas específicas e acionáveis para melhorar o currículo\n7. \"rewritten_summary\": um resumo profissional perfeitamente otimizado e compatível com ATS, substituindo o atual\n8. \"questions\": array com exatamente 10 perguntas estratégicas para entender melhor o candidato e poder criar um currículo personalizado e poderoso. As perguntas devem cobrir: conquistas com números, projetos relevantes, cargo alvo, empresa alvo, soft skills demonstradas, certificações, lacunas no histórico, diferenciais competitivos, preferência de trabalho (remoto/híbrido/presencial) e expectativa salarial.\n\nRetorne APENAS o JSON. Nenhum texto antes ou depois."
         }
       },
       "id": "067bc657-2fe7-415b-9364-edc64702fbfc",
       "name": "AI Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3,
-      "position": [768, -112],
-      "notes": "Recebe o texto extraído do PDF via input.\nGroq llama-3.3-70b processa e retorna JSON estrito.\nSystem prompt instrui a retornar APENAS JSON, sem markdown."
+      "position": [880, 624],
+      "notes": "Analisa o currículo e já gera as 10 perguntas estratégicas.\nO array 'questions' é retornado ao front para exibir o formulário."
     },
     {
       "parameters": {
@@ -61,7 +63,7 @@
       "name": "Groq Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
-      "position": [656, 96],
+      "position": [752, 832],
       "credentials": {
         "groqApi": {
           "id": "rNAey3eUeDioukUT",
@@ -70,23 +72,27 @@
       }
     },
     {
-      "parameters": {},
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Code - Valida id e binário1').item.json.id }}",
+        "contextWindowLength": 5
+      },
       "id": "5c7516ca-bf3d-417a-9125-a3bb0b830ca2",
       "name": "Simple Memory",
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
-      "position": [864, 96]
+      "position": [896, 832]
     },
     {
       "parameters": {
-        "jsCode": "const resumeId = $('Code - Valida id e binário').first().json.id;\n\n// AI Agent retorna em output ou text dependendo da versão\nconst raw = $input.first().json.output || $input.first().json.text || '';\n\n// Remove possível markdown code block caso o modelo quebre a instrução\nconst cleaned = raw.replace(/```json/gi, '').replace(/```/g, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch(e) {\n  throw new Error('Groq não retornou JSON válido. Raw: ' + raw);\n}\n\nreturn [{\n  json: {\n    resume_id: resumeId,\n    employability_score: parsed.employability_score,\n    ats_rejection_chance: parsed.ats_rejection_chance,\n    hook_message: parsed.hook_message,\n    brutal_roast: parsed.brutal_roast,\n    red_flags: JSON.stringify(parsed.red_flags),\n    improvement_tips: JSON.stringify(parsed.improvement_tips),\n    rewritten_summary: parsed.rewritten_summary,\n    status: 'analyzed',\n    created_at: new Date().toISOString()\n  }\n}];"
+        "jsCode": "const resumeId = $('Code - Valida id e binário1').first().json.id;\n\nconst raw = $input.first().json.output\n  || $input.first().json.message?.content\n  || $input.first().json.choices?.[0]?.message?.content;\n\nif (!raw) throw new Error('Resposta do AI Agent vazia. Raw: ' + JSON.stringify($input.first().json));\n\nlet parsed;\ntry {\n  const clean = typeof raw === 'string' ? raw.replace(/```json|```/g, '').trim() : raw;\n  parsed = typeof clean === 'string' ? JSON.parse(clean) : clean;\n} catch(e) {\n  throw new Error('JSON inválido retornado: ' + raw);\n}\n\nreturn [{\n  json: {\n    resume_id: resumeId,\n    employability_score: parsed.employability_score,\n    ats_rejection_chance: parsed.ats_rejection_chance,\n    hook_message: parsed.hook_message,\n    brutal_roast: parsed.brutal_roast,\n    red_flags: JSON.stringify(parsed.red_flags),\n    improvement_tips: JSON.stringify(parsed.improvement_tips),\n    rewritten_summary: parsed.rewritten_summary,\n    questions: JSON.stringify(parsed.questions || []),\n    status: 'analyzed',\n    created_at: new Date().toISOString()\n  }\n}];"
       },
-      "id": "ec9b3048-91ff-49f1-bc66-02849e7694c9",
-      "name": "Code - Parse e Monta Objeto",
+      "id": "abb49247-0229-4520-8b89-31e63df29e0a",
+      "name": "Code - Parse e Monta Objeto1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [992, -112],
-      "notes": "Faz JSON.parse do response do Groq.\nLimpa possível markdown (```json) antes do parse.\nMonta objeto final com resume_id e todos os campos."
+      "position": [1248, 624],
+      "notes": "Faz JSON.parse do response do Groq.\nExtrai também o campo 'questions' para devolver ao front."
     },
     {
       "parameters": {
@@ -108,6 +114,7 @@
             "red_flags": "={{ $json.red_flags }}",
             "improvement_tips": "={{ $json.improvement_tips }}",
             "rewritten_summary": "={{ $json.rewritten_summary }}",
+            "questions": "={{ $json.questions }}",
             "status": "={{ $json.status }}",
             "created_at": "={{ $json.created_at }}"
           },
@@ -118,40 +125,40 @@
         },
         "options": {}
       },
-      "id": "9d3a1406-7e79-494f-b016-4a1705733cb3",
-      "name": "DataTable - Insert resume_roasts",
+      "id": "6d37eae6-698f-487f-a12b-0670ab63426d",
+      "name": "DataTable - Insert resume_roasts1",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
-      "position": [1216, -112]
+      "position": [1488, 624]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({\n  resume_id: $('Code - Parse e Monta Objeto').first().json.resume_id,\n  employability_score: $('Code - Parse e Monta Objeto').first().json.employability_score,\n  ats_rejection_chance: $('Code - Parse e Monta Objeto').first().json.ats_rejection_chance,\n  hook_message: $('Code - Parse e Monta Objeto').first().json.hook_message,\n  brutal_roast: $('Code - Parse e Monta Objeto').first().json.brutal_roast,\n  red_flags: JSON.parse($('Code - Parse e Monta Objeto').first().json.red_flags),\n  improvement_tips: JSON.parse($('Code - Parse e Monta Objeto').first().json.improvement_tips),\n  rewritten_summary: $('Code - Parse e Monta Objeto').first().json.rewritten_summary\n}) }}",
+        "responseBody": "={{ JSON.stringify({\n  resume_id: $('Code - Parse e Monta Objeto1').first().json.resume_id,\n  employability_score: $('Code - Parse e Monta Objeto1').first().json.employability_score,\n  ats_rejection_chance: $('Code - Parse e Monta Objeto1').first().json.ats_rejection_chance,\n  hook_message: $('Code - Parse e Monta Objeto1').first().json.hook_message,\n  brutal_roast: $('Code - Parse e Monta Objeto1').first().json.brutal_roast,\n  red_flags: JSON.parse($('Code - Parse e Monta Objeto1').first().json.red_flags),\n  improvement_tips: JSON.parse($('Code - Parse e Monta Objeto1').first().json.improvement_tips),\n  rewritten_summary: $('Code - Parse e Monta Objeto1').first().json.rewritten_summary,\n  questions: JSON.parse($('Code - Parse e Monta Objeto1').first().json.questions)\n}) }}",
         "options": {
           "responseCode": 200
         }
       },
-      "id": "da58849b-3c2a-4047-b6dc-2ce889beee02",
-      "name": "Respond to Webhook - Resultado Completo",
+      "id": "5140f78f-fc7f-400d-a8fb-26ad1cacfc71",
+      "name": "Respond to Webhook - Resultado Completo1",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1440, -112],
-      "notes": "Retorna o resultado completo para o front-end.\nArrays são desserializados de volta para JSON antes de devolver."
+      "position": [1712, 624],
+      "notes": "Retorna análise completa + array questions para o front.\nO front exibe as perguntas, usuário responde e chama POST /gerar-curriculo."
     }
   ],
   "connections": {
-    "Webhook POST /upload-resume": {
-      "main": [[{ "node": "Code - Valida id e binário", "type": "main", "index": 0 }]]
+    "Webhook POST /upload-resume1": {
+      "main": [[{ "node": "Code - Valida id e binário1", "type": "main", "index": 0 }]]
     },
-    "Code - Valida id e binário": {
+    "Code - Valida id e binário1": {
       "main": [[{ "node": "Extract from File - PDF to Text", "type": "main", "index": 0 }]]
     },
     "Extract from File - PDF to Text": {
       "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]]
     },
     "AI Agent": {
-      "main": [[{ "node": "Code - Parse e Monta Objeto", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Code - Parse e Monta Objeto1", "type": "main", "index": 0 }]]
     },
     "Groq Chat Model": {
       "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]]
@@ -159,11 +166,11 @@
     "Simple Memory": {
       "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]]
     },
-    "Code - Parse e Monta Objeto": {
-      "main": [[{ "node": "DataTable - Insert resume_roasts", "type": "main", "index": 0 }]]
+    "Code - Parse e Monta Objeto1": {
+      "main": [[{ "node": "DataTable - Insert resume_roasts1", "type": "main", "index": 0 }]]
     },
-    "DataTable - Insert resume_roasts": {
-      "main": [[{ "node": "Respond to Webhook - Resultado Completo", "type": "main", "index": 0 }]]
+    "DataTable - Insert resume_roasts1": {
+      "main": [[{ "node": "Respond to Webhook - Resultado Completo1", "type": "main", "index": 0 }]]
     }
   },
   "pinData": {},
@@ -171,7 +178,5 @@
     "templateCredsSetupCompleted": true,
     "instanceId": "5c28372f8539d1fc026bc6d1c9263c72b310a93650bd9ed58d2c3834b89e10ae"
   },
-  "settings": {
-    "executionOrder": "v1"
-  }
+  "settings": { "executionOrder": "v1" }
 }
