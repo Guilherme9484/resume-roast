@@ -1,5 +1,5 @@
 {
-  "name": "Fluxo 2 - Gerar Currículo Reescrito (Premium)",
+  "name": "Fluxo 2 - Gerar Currículo Reescrito",
   "nodes": [
     {
       "parameters": {
@@ -8,54 +8,50 @@
         "options": {},
         "responseMode": "responseNode"
       },
-      "id": "node-f2-01-webhook",
+      "id": "f2-node-01",
       "name": "Webhook POST /gerar-curriculo",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
-      "notes": "Chamado pelo front quando o usuário escolhe a opção premium.\nBody esperado:\n{\n  'resume_id': 'uuid-gerado-no-front',\n  'target_role': 'Senior Backend Engineer',  // opcional\n  'target_company': 'Google'                 // opcional\n}"
+      "position": [0, 300],
+      "notes": "Body esperado (JSON):\n{\n  'resume_id': 'uuid-do-upload',\n  'target_role': 'Senior Backend Engineer',  // opcional\n  'target_company': 'Google'                 // opcional\n}"
     },
     {
       "parameters": {
         "jsCode": "const resume_id = $input.first().json.body?.resume_id;\nconst target_role = $input.first().json.body?.target_role || null;\nconst target_company = $input.first().json.body?.target_company || null;\n\nif (!resume_id) throw new Error('Campo resume_id não encontrado no body.');\n\nreturn [{ json: { resume_id, target_role, target_company } }];"
       },
-      "id": "node-f2-02-validate",
+      "id": "f2-node-02",
       "name": "Code - Valida Body",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300],
-      "notes": "Valida que o resume_id foi enviado.\nExtrai campos opcionais: target_role e target_company para personalizar o currículo."
+      "position": [220, 300],
+      "notes": "Valida resume_id obrigatório.\nExtrai target_role e target_company opcionais."
     },
     {
       "parameters": {
-        "mode": "get",
-        "tableName": {
+        "operation": "get",
+        "dataTableId": {
           "__rl": true,
-          "value": "resume_roasts",
-          "mode": "name"
-        },
-        "filterType": "equal",
-        "filterField": "resume_id",
-        "filterValue": "={{ $json.resume_id }}",
-        "options": {}
+          "mode": "list",
+          "value": ""
+        }
       },
-      "id": "node-f2-03-get-data",
-      "name": "n8n Data Store - Busca Análise Original",
-      "type": "n8n-nodes-base.n8nTrainingCustomDataService",
+      "id": "f2-node-03",
+      "name": "DataTable - Get Análise Original",
+      "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
-      "position": [680, 300],
-      "notes": "Busca o registro original da análise na tabela interna do n8n.\nUsa o resume_id como chave de busca.\nRetorna todos os campos salvos no Fluxo 1."
+      "position": [440, 300],
+      "notes": "Busca o registro da análise pelo resume_id.\n⚠️ Preencha o dataTableId com o ID da tabela 'resume_roasts'.\nConfigure o filtro: campo 'resume_id' igual a {{ $json.resume_id }}"
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst meta = $('Code - Valida Body').first().json;\n\nif (!data || !data.resume_id) {\n  throw new Error(`Análise não encontrada para resume_id: ${meta.resume_id}`);\n}\n\nconst redFlags = typeof data.red_flags === 'string' ? JSON.parse(data.red_flags) : data.red_flags;\nconst tips = typeof data.improvement_tips === 'string' ? JSON.parse(data.improvement_tips) : data.improvement_tips;\n\nconst targetContext = meta.target_role\n  ? `\\n\\nIMPORTANT: Tailor this resume specifically for the role of '${meta.target_role}'${ meta.target_company ? ` at ${meta.target_company}` : '' }. Use keywords and skills typical for this role.`\n  : '';\n\nconst prompt = `You are a world-class resume writer and career strategist. You already analyzed this resume and found these issues:\n\nBrutal Roast: ${data.brutal_roast}\nRed Flags: ${JSON.stringify(redFlags)}\nImprovement Tips: ${JSON.stringify(tips)}\nCurrent Summary: ${data.rewritten_summary}${targetContext}\n\nNow create a COMPLETE, FULLY REWRITTEN resume based on these findings. Return ONLY a strict JSON with:\n1) 'new_summary': optimized professional summary (3-4 lines)\n2) 'key_skills': array of 10-15 relevant technical and soft skills\n3) 'experience_bullets': array of 5-8 achievement-focused bullet points using STAR method and numbers\n4) 'certifications_suggestions': array of 3 relevant certifications to pursue\n5) 'ats_keywords': array of 15 keywords to add for ATS optimization\n6) 'final_score_prediction': predicted employability score after applying all changes (number 0-100)\n7) 'cover_letter_opening': a strong opening paragraph for a cover letter`;\n\nreturn [{ json: { prompt, resume_id: data.resume_id, original_score: data.employability_score } }];"
+        "jsCode": "const data = $input.first().json;\nconst meta = $('Code - Valida Body').first().json;\n\nif (!data || !data.resume_id) {\n  throw new Error(`Análise não encontrada para resume_id: ${meta.resume_id}`);\n}\n\nconst redFlags = typeof data.red_flags === 'string' ? JSON.parse(data.red_flags) : data.red_flags;\nconst tips = typeof data.improvement_tips === 'string' ? JSON.parse(data.improvement_tips) : data.improvement_tips;\n\nconst targetContext = meta.target_role\n  ? `\\n\\nIMPORTANT: Tailor this resume specifically for the role of '${meta.target_role}'${ meta.target_company ? ` at ${meta.target_company}` : '' }. Use keywords and skills typical for this role.`\n  : '';\n\nconst prompt = `You are a world-class resume writer and career strategist. You already analyzed this resume and found these issues:\n\nBrutal Roast: ${data.brutal_roast}\nRed Flags: ${JSON.stringify(redFlags)}\nImprovement Tips: ${JSON.stringify(tips)}\nCurrent Summary: ${data.rewritten_summary}${targetContext}\n\nNow create a COMPLETE, FULLY REWRITTEN resume. Return ONLY a strict JSON with:\n1) 'new_summary': optimized professional summary (3-4 lines)\n2) 'key_skills': array of 10-15 relevant technical and soft skills\n3) 'experience_bullets': array of 5-8 achievement-focused bullet points using STAR method with numbers\n4) 'certifications_suggestions': array of 3 relevant certifications to pursue\n5) 'ats_keywords': array of 15 keywords for ATS optimization\n6) 'final_score_prediction': predicted employability score after changes (number 0-100)\n7) 'cover_letter_opening': a strong opening paragraph for a cover letter`;\n\nreturn [{ json: { prompt, resume_id: data.resume_id, original_score: data.employability_score } }];"
       },
-      "id": "node-f2-04-build-prompt",
+      "id": "f2-node-04",
       "name": "Code - Monta Prompt com Contexto",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300],
-      "notes": "Usa os dados da análise original para montar um prompt rico.\nSe target_role/company foram passados, personaliza o currículo para aquela vaga.\nGera o prompt final para o GPT-4o."
+      "position": [660, 300],
+      "notes": "Usa os dados da análise original para montar prompt rico.\nInclui target_role/company se foram passados."
     },
     {
       "parameters": {
@@ -78,71 +74,73 @@
           "responseFormat": "json_object"
         }
       },
-      "id": "node-f2-05-openai",
-      "name": "OpenAI GPT-4o - Gera Currículo Reescrito",
+      "id": "f2-node-05",
+      "name": "OpenAI GPT-4o - Gera Currículo",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1,
-      "position": [1120, 300],
-      "notes": "GPT-4o recebe o prompt com o contexto completo da análise original.\nRetorna o currículo novo, skills, bullets STAR, ATS keywords e sugestão de cover letter."
+      "position": [880, 300],
+      "notes": "GPT-4o recebe o prompt com contexto completo.\nRetorna novo currículo, skills, bullets STAR, ATS keywords e cover letter."
     },
     {
       "parameters": {
-        "jsCode": "const resumeId = $('Code - Valida Body').first().json.resume_id;\nconst originalScore = $('Code - Monta Prompt com Contexto').first().json.original_score;\nconst content = $input.first().json.message?.content || $input.first().json.choices?.[0]?.message?.content;\n\nlet parsed;\ntry {\n  parsed = typeof content === 'string' ? JSON.parse(content) : content;\n} catch(e) {\n  throw new Error('GPT-4o não retornou JSON válido: ' + content);\n}\n\nreturn [{\n  json: {\n    resume_id: resumeId,\n    original_score: originalScore,\n    final_score_prediction: parsed.final_score_prediction,\n    score_improvement: parsed.final_score_prediction - originalScore,\n    new_summary: parsed.new_summary,\n    key_skills: parsed.key_skills,\n    experience_bullets: parsed.experience_bullets,\n    certifications_suggestions: parsed.certifications_suggestions,\n    ats_keywords: parsed.ats_keywords,\n    cover_letter_opening: parsed.cover_letter_opening,\n    generated_at: new Date().toISOString()\n  }\n}];"
+        "jsCode": "const resumeId = $('Code - Valida Body').first().json.resume_id;\nconst originalScore = $('Code - Monta Prompt com Contexto').first().json.original_score;\nconst content = $input.first().json.message?.content || $input.first().json.choices?.[0]?.message?.content;\n\nlet parsed;\ntry {\n  parsed = typeof content === 'string' ? JSON.parse(content) : content;\n} catch(e) {\n  throw new Error('GPT-4o não retornou JSON válido: ' + content);\n}\n\nreturn [{\n  json: {\n    resume_id: resumeId,\n    original_score: originalScore,\n    final_score_prediction: parsed.final_score_prediction,\n    score_improvement: parsed.final_score_prediction - originalScore,\n    new_summary: parsed.new_summary,\n    key_skills: JSON.stringify(parsed.key_skills),\n    experience_bullets: JSON.stringify(parsed.experience_bullets),\n    certifications_suggestions: JSON.stringify(parsed.certifications_suggestions),\n    ats_keywords: JSON.stringify(parsed.ats_keywords),\n    cover_letter_opening: parsed.cover_letter_opening,\n    new_resume_generated: true,\n    status: 'resume_generated',\n    generated_at: new Date().toISOString()\n  }\n}];"
       },
-      "id": "node-f2-06-parse",
+      "id": "f2-node-06",
       "name": "Code - Parse Currículo Gerado",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1340, 300],
-      "notes": "Faz parse do JSON do GPT-4o.\nCalcula score_improvement (diferença entre score original e previsto após melhoria)."
+      "position": [1100, 300],
+      "notes": "Parse do JSON do GPT-4o.\nCalcula score_improvement (final - original).\nSerializa arrays para string antes do update na tabela."
     },
     {
       "parameters": {
-        "mode": "update",
-        "tableName": {
+        "operation": "update",
+        "dataTableId": {
           "__rl": true,
-          "value": "resume_roasts",
-          "mode": "name"
+          "mode": "list",
+          "value": ""
         },
-        "filterType": "equal",
-        "filterField": "resume_id",
-        "filterValue": "={{ $json.resume_id }}",
-        "dataToUpdate": "defineBelow",
-        "updateFields": {
-          "values": [
-            { "fieldName": "new_resume_generated", "fieldValue": true },
-            { "fieldName": "new_summary", "fieldValue": "={{ $json.new_summary }}" },
-            { "fieldName": "key_skills", "fieldValue": "={{ JSON.stringify($json.key_skills) }}" },
-            { "fieldName": "experience_bullets", "fieldValue": "={{ JSON.stringify($json.experience_bullets) }}" },
-            { "fieldName": "ats_keywords", "fieldValue": "={{ JSON.stringify($json.ats_keywords) }}" },
-            { "fieldName": "final_score_prediction", "fieldValue": "={{ $json.final_score_prediction }}" },
-            { "fieldName": "cover_letter_opening", "fieldValue": "={{ $json.cover_letter_opening }}" },
-            { "fieldName": "status", "fieldValue": "resume_generated" }
-          ]
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "new_resume_generated": "={{ $json.new_resume_generated }}",
+            "new_summary": "={{ $json.new_summary }}",
+            "key_skills": "={{ $json.key_skills }}",
+            "experience_bullets": "={{ $json.experience_bullets }}",
+            "certifications_suggestions": "={{ $json.certifications_suggestions }}",
+            "ats_keywords": "={{ $json.ats_keywords }}",
+            "final_score_prediction": "={{ $json.final_score_prediction }}",
+            "cover_letter_opening": "={{ $json.cover_letter_opening }}",
+            "status": "={{ $json.status }}"
+          },
+          "matchingColumns": ["resume_id"],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
         },
         "options": {}
       },
-      "id": "node-f2-07-update-table",
-      "name": "n8n Data Store - Update resume_roasts",
-      "type": "n8n-nodes-base.n8nTrainingCustomDataService",
+      "id": "f2-node-07",
+      "name": "DataTable - Update resume_roasts",
+      "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
-      "position": [1560, 300],
-      "notes": "Atualiza o registro na tabela interna do n8n com o currículo gerado.\nCampo status muda para 'resume_generated'."
+      "position": [1320, 300],
+      "notes": "Atualiza o registro existente na tabela.\nmatchingColumns: resume_id (chave de busca)\n⚠️ Preencha o dataTableId com o ID da tabela 'resume_roasts'."
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify($('Code - Parse Currículo Gerado').first().json) }}",
+        "responseBody": "={{ JSON.stringify({\n  resume_id: $('Code - Parse Currículo Gerado').first().json.resume_id,\n  original_score: $('Code - Parse Currículo Gerado').first().json.original_score,\n  final_score_prediction: $('Code - Parse Currículo Gerado').first().json.final_score_prediction,\n  score_improvement: $('Code - Parse Currículo Gerado').first().json.score_improvement,\n  new_summary: $('Code - Parse Currículo Gerado').first().json.new_summary,\n  key_skills: JSON.parse($('Code - Parse Currículo Gerado').first().json.key_skills),\n  experience_bullets: JSON.parse($('Code - Parse Currículo Gerado').first().json.experience_bullets),\n  certifications_suggestions: JSON.parse($('Code - Parse Currículo Gerado').first().json.certifications_suggestions),\n  ats_keywords: JSON.parse($('Code - Parse Currículo Gerado').first().json.ats_keywords),\n  cover_letter_opening: $('Code - Parse Currículo Gerado').first().json.cover_letter_opening,\n  generated_at: $('Code - Parse Currículo Gerado').first().json.generated_at\n}) }}",
         "options": {
           "responseCode": 200
         }
       },
-      "id": "node-f2-08-respond",
+      "id": "f2-node-08",
       "name": "Respond to Webhook - Entrega Currículo",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1780, 300],
-      "notes": "Retorna o currículo reescrito completo para o front-end.\nO front pode renderizar o novo currículo, skills, bullets e a abertura da cover letter."
+      "position": [1540, 300],
+      "notes": "Retorna o currículo reescrito completo.\nArrays são desserializados de volta antes de devolver ao front."
     }
   ],
   "connections": {
@@ -150,21 +148,21 @@
       "main": [[{ "node": "Code - Valida Body", "type": "main", "index": 0 }]]
     },
     "Code - Valida Body": {
-      "main": [[{ "node": "n8n Data Store - Busca Análise Original", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "DataTable - Get Análise Original", "type": "main", "index": 0 }]]
     },
-    "n8n Data Store - Busca Análise Original": {
+    "DataTable - Get Análise Original": {
       "main": [[{ "node": "Code - Monta Prompt com Contexto", "type": "main", "index": 0 }]]
     },
     "Code - Monta Prompt com Contexto": {
-      "main": [[{ "node": "OpenAI GPT-4o - Gera Currículo Reescrito", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "OpenAI GPT-4o - Gera Currículo", "type": "main", "index": 0 }]]
     },
-    "OpenAI GPT-4o - Gera Currículo Reescrito": {
+    "OpenAI GPT-4o - Gera Currículo": {
       "main": [[{ "node": "Code - Parse Currículo Gerado", "type": "main", "index": 0 }]]
     },
     "Code - Parse Currículo Gerado": {
-      "main": [[{ "node": "n8n Data Store - Update resume_roasts", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "DataTable - Update resume_roasts", "type": "main", "index": 0 }]]
     },
-    "n8n Data Store - Update resume_roasts": {
+    "DataTable - Update resume_roasts": {
       "main": [[{ "node": "Respond to Webhook - Entrega Currículo", "type": "main", "index": 0 }]]
     }
   },
