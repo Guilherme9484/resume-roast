@@ -1,0 +1,83 @@
+{
+  "name": "Fluxo 2 - Confirmação de Pagamento",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-pagamento",
+        "options": {},
+        "responseMode": "lastNode"
+      },
+      "id": "b2c3d4e5-0001-0001-0001-000000000001",
+      "name": "Webhook POST /webhook-pagamento",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "notes": "Recebe o ping do gateway de pagamento (Stripe / LemonSqueezy / Mercado Pago). Responde 200 imediatamente para o gateway não retentar."
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "resume_roasts",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status_pagamento": true,
+            "updated_at": "={{ new Date().toISOString() }}"
+          }
+        },
+        "where": {
+          "values": [
+            {
+              "column": "id",
+              "condition": "equal",
+              "value": "={{ $json.body.data.object.metadata.resume_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-0002-0002-0002-000000000002",
+      "name": "Postgres - Update status_pagamento",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [480, 300],
+      "notes": "Atualiza status_pagamento para TRUE. O campo 'id' vem dos metadata do gateway:\n- Stripe: $json.body.data.object.metadata.resume_id\n- LemonSqueezy: $json.body.meta.custom_data.resume_id\n- Mercado Pago: $json.body.external_reference"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true }",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "b2c3d4e5-0003-0003-0003-000000000003",
+      "name": "Respond 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [720, 300],
+      "notes": "Retorna { ok: true } ao gateway. Necessário para o gateway não ficar retentando o webhook."
+    }
+  ],
+  "connections": {
+    "Webhook POST /webhook-pagamento": {
+      "main": [[{ "node": "Postgres - Update status_pagamento", "type": "main", "index": 0 }]]
+    },
+    "Postgres - Update status_pagamento": {
+      "main": [[{ "node": "Respond 200 OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
