@@ -5,91 +5,88 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "upload-resume",
-        "options": {
-          "binaryData": true
-        },
-        "responseMode": "responseNode"
+        "responseMode": "responseNode",
+        "options": {}
       },
-      "id": "f1-node-01",
+      "id": "bb26d2bc-9cbd-448d-86bb-47e193593c0f",
       "name": "Webhook POST /upload-resume",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 300],
+      "position": [160, -112],
+      "webhookId": "98f11691-9815-4433-b65e-39eed13ba9bf",
       "notes": "Recebe multipart/form-data.\nCampos esperados:\n- file: arquivo PDF (binário)\n- id: UUID gerado no front-end (ex: crypto.randomUUID())"
     },
     {
       "parameters": {
         "jsCode": "const id = $input.first().json.body?.id || $input.first().json.id;\nconst binaryKey = Object.keys($input.first().binary || {})[0] || 'data';\n\nif (!id) throw new Error('Campo id não encontrado no body da requisição.');\nif (!$input.first().binary?.[binaryKey]) throw new Error('Arquivo PDF não encontrado.');\n\nreturn [{\n  json: { id, binaryKey },\n  binary: $input.first().binary\n}];"
       },
-      "id": "f1-node-02",
+      "id": "9fb933d2-337a-4b7f-9b40-a02e02eebb1f",
       "name": "Code - Valida id e binário",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 300],
+      "position": [384, -112],
       "notes": "Valida que o id e o PDF vieram corretamente.\nDefine qual chave binária usar no próximo nó."
     },
     {
       "parameters": {
-        "resource": "file",
-        "operation": "upload",
-        "binaryPropertyName": "={{ $json.binaryKey }}",
-        "options": {
-          "purpose": "assistants"
-        }
+        "operation": "pdf",
+        "options": {}
       },
-      "id": "f1-node-03",
-      "name": "OpenAI - Upload do PDF",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "id": "extract-pdf-node",
+      "name": "Extract from File - PDF to Text",
+      "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
-      "position": [440, 300],
-      "notes": "Faz upload do PDF para a OpenAI Files API.\nRetorna file_id usado no Chat Completion.\nCredential: OpenAI API Key."
+      "position": [576, -112],
+      "notes": "Converte o PDF binário em texto puro.\nResultado disponível em $json.text\nSem custo de API — processamento local do n8n."
     },
     {
       "parameters": {
-        "resource": "chat",
-        "operation": "create",
-        "model": {
-          "__rl": true,
-          "value": "gpt-4o",
-          "mode": "list"
-        },
-        "messages": {
-          "values": [
-            {
-              "role": "user",
-              "content": "={{ 'You are an elite tech recruiter and career coach. You are brutally honest and have zero patience for corporate buzzwords. Analyze the attached resume PDF. Return ONLY a strict JSON with the following keys:\\n\\n1) \\'employability_score\\': (number 0-100)\\n2) \\'ats_rejection_chance\\': (number 0-100)\\n3) \\'hook_message\\': (one direct sentence describing the biggest problem found)\\n4) \\'brutal_roast\\': (a direct and funny paragraph exposing all the flaws)\\n5) \\'red_flags\\': (array of exactly 3 terrible clichés or problems found)\\n6) \\'improvement_tips\\': (array of 5 specific and actionable tips)\\n7) \\'rewritten_summary\\': (a perfectly optimized ATS-friendly professional summary)' }}"
-            }
-          ]
-        },
         "options": {
-          "responseFormat": "json_object"
-        },
-        "additionalFields": {
-          "attachments": [
-            {
-              "file_id": "={{ $json.id }}",
-              "tools": [{ "type": "file_search" }]
-            }
-          ]
+          "systemMessage": "You are an elite tech recruiter and career coach. You are brutally honest and have zero patience for corporate buzzwords. The user will send you the full text of a resume. Analyze it carefully and return ONLY a strict JSON (no markdown, no explanation, just the raw JSON object) with exactly these keys:\n\n1) \"employability_score\": integer from 0 to 100\n2) \"ats_rejection_chance\": integer from 0 to 100 (percentage chance of ATS rejection)\n3) \"hook_message\": one direct sentence describing the single biggest problem found\n4) \"brutal_roast\": a direct and funny paragraph exposing all the flaws of this resume\n5) \"red_flags\": array of exactly 3 strings — the worst clichés or problems found\n6) \"improvement_tips\": array of exactly 5 strings — specific and actionable tips to improve this resume\n7) \"rewritten_summary\": a perfectly optimized, ATS-friendly professional summary replacing their current one\n\nReturn ONLY the JSON. No text before or after."
         }
       },
-      "id": "f1-node-04",
-      "name": "OpenAI GPT-4o - Analisa Currículo",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1,
-      "position": [660, 300],
-      "notes": "GPT-4o analisa o PDF via file_id.\nRetorna JSON com todos os campos de análise."
+      "id": "067bc657-2fe7-415b-9364-edc64702fbfc",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [768, -112],
+      "notes": "Recebe o texto extraído do PDF via input.\nGroq llama-3.3-70b processa e retorna JSON estrito.\nSystem prompt instrui a retornar APENAS JSON, sem markdown."
     },
     {
       "parameters": {
-        "jsCode": "const resumeId = $('Code - Valida id e binário').first().json.id;\nconst content = $input.first().json.message?.content || $input.first().json.choices?.[0]?.message?.content;\n\nlet parsed;\ntry {\n  parsed = typeof content === 'string' ? JSON.parse(content) : content;\n} catch(e) {\n  throw new Error('GPT-4o não retornou JSON válido: ' + content);\n}\n\nreturn [{\n  json: {\n    resume_id: resumeId,\n    employability_score: parsed.employability_score,\n    ats_rejection_chance: parsed.ats_rejection_chance,\n    hook_message: parsed.hook_message,\n    brutal_roast: parsed.brutal_roast,\n    red_flags: JSON.stringify(parsed.red_flags),\n    improvement_tips: JSON.stringify(parsed.improvement_tips),\n    rewritten_summary: parsed.rewritten_summary,\n    status: 'analyzed',\n    created_at: new Date().toISOString()\n  }\n}];"
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
       },
-      "id": "f1-node-05",
+      "id": "9d241665-8f39-404d-b9ea-14d94a47a39f",
+      "name": "Groq Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [656, 96],
+      "credentials": {
+        "groqApi": {
+          "id": "rNAey3eUeDioukUT",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "5c7516ca-bf3d-417a-9125-a3bb0b830ca2",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [864, 96]
+    },
+    {
+      "parameters": {
+        "jsCode": "const resumeId = $('Code - Valida id e binário').first().json.id;\n\n// AI Agent retorna em output ou text dependendo da versão\nconst raw = $input.first().json.output || $input.first().json.text || '';\n\n// Remove possível markdown code block caso o modelo quebre a instrução\nconst cleaned = raw.replace(/```json/gi, '').replace(/```/g, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch(e) {\n  throw new Error('Groq não retornou JSON válido. Raw: ' + raw);\n}\n\nreturn [{\n  json: {\n    resume_id: resumeId,\n    employability_score: parsed.employability_score,\n    ats_rejection_chance: parsed.ats_rejection_chance,\n    hook_message: parsed.hook_message,\n    brutal_roast: parsed.brutal_roast,\n    red_flags: JSON.stringify(parsed.red_flags),\n    improvement_tips: JSON.stringify(parsed.improvement_tips),\n    rewritten_summary: parsed.rewritten_summary,\n    status: 'analyzed',\n    created_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "ec9b3048-91ff-49f1-bc66-02849e7694c9",
       "name": "Code - Parse e Monta Objeto",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 300],
-      "notes": "Faz JSON.parse do response do GPT-4o.\nMonta objeto final com resume_id e todos os campos."
+      "position": [992, -112],
+      "notes": "Faz JSON.parse do response do Groq.\nLimpa possível markdown (```json) antes do parse.\nMonta objeto final com resume_id e todos os campos."
     },
     {
       "parameters": {
@@ -121,12 +118,11 @@
         },
         "options": {}
       },
-      "id": "f1-node-06",
+      "id": "9d3a1406-7e79-494f-b016-4a1705733cb3",
       "name": "DataTable - Insert resume_roasts",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
-      "position": [1100, 300],
-      "notes": "Insere o registro na tabela interna do n8n.\n⚠️ Antes de usar: crie a tabela 'resume_roasts' no n8n Data Tables\ne preencha o dataTableId com o ID gerado."
+      "position": [1216, -112]
     },
     {
       "parameters": {
@@ -136,11 +132,11 @@
           "responseCode": 200
         }
       },
-      "id": "f1-node-07",
+      "id": "da58849b-3c2a-4047-b6dc-2ce889beee02",
       "name": "Respond to Webhook - Resultado Completo",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1320, 300],
+      "position": [1440, -112],
       "notes": "Retorna o resultado completo para o front-end.\nArrays são desserializados de volta para JSON antes de devolver."
     }
   ],
@@ -149,13 +145,19 @@
       "main": [[{ "node": "Code - Valida id e binário", "type": "main", "index": 0 }]]
     },
     "Code - Valida id e binário": {
-      "main": [[{ "node": "OpenAI - Upload do PDF", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Extract from File - PDF to Text", "type": "main", "index": 0 }]]
     },
-    "OpenAI - Upload do PDF": {
-      "main": [[{ "node": "OpenAI GPT-4o - Analisa Currículo", "type": "main", "index": 0 }]]
+    "Extract from File - PDF to Text": {
+      "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]]
     },
-    "OpenAI GPT-4o - Analisa Currículo": {
+    "AI Agent": {
       "main": [[{ "node": "Code - Parse e Monta Objeto", "type": "main", "index": 0 }]]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Simple Memory": {
+      "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]]
     },
     "Code - Parse e Monta Objeto": {
       "main": [[{ "node": "DataTable - Insert resume_roasts", "type": "main", "index": 0 }]]
@@ -163,6 +165,11 @@
     "DataTable - Insert resume_roasts": {
       "main": [[{ "node": "Respond to Webhook - Resultado Completo", "type": "main", "index": 0 }]]
     }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5c28372f8539d1fc026bc6d1c9263c72b310a93650bd9ed58d2c3834b89e10ae"
   },
   "settings": {
     "executionOrder": "v1"
