@@ -1,5 +1,5 @@
 {
-  "name": "Fluxo 1 - Upload e Processamento do Currículo",
+  "name": "Fluxo 1 - Upload, Análise e Armazenamento",
   "nodes": [
     {
       "parameters": {
@@ -10,24 +10,39 @@
         },
         "responseMode": "responseNode"
       },
-      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "id": "node-01-webhook",
       "name": "Webhook POST /upload-resume",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [240, 300],
-      "notes": "Recebe multipart/form-data com: campo 'file' (PDF binário) e campo 'id' (UUID gerado no front-end)"
+      "notes": "Recebe multipart/form-data.\nCampos esperados:\n- file: arquivo PDF (binário)\n- id: UUID gerado no front-end (ex: crypto.randomUUID())\nO 'id' será a chave para buscar o resultado depois."
     },
     {
       "parameters": {
-        "operation": "pdf",
-        "options": {}
+        "jsCode": "// Extrai o id do body e o nome do arquivo binário\nconst id = $input.first().json.body?.id || $input.first().json.id;\nconst binaryKey = Object.keys($input.first().binary || {})[0] || 'data';\n\nif (!id) throw new Error('Campo id não encontrado no body da requisição.');\nif (!$input.first().binary?.[binaryKey]) throw new Error('Arquivo PDF não encontrado.');\n\nreturn [{\n  json: { id, binaryKey },\n  binary: $input.first().binary\n}];"
       },
-      "id": "a1b2c3d4-0002-0002-0002-000000000002",
-      "name": "Extract from File (PDF to Text)",
-      "type": "n8n-nodes-base.extractFromFile",
+      "id": "node-02-extract-fields",
+      "name": "Code - Extrai id e binário",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "notes": "Valida que o id e o PDF vieram corretamente. Define qual chave binária usar no próximo nó."
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "binaryPropertyName": "={{ $json.binaryKey }}",
+        "options": {
+          "purpose": "assistants"
+        }
+      },
+      "id": "node-03-upload-file",
+      "name": "OpenAI - Upload do PDF",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1,
-      "position": [480, 300],
-      "notes": "Converte PDF binário em texto puro. Resultado disponível em $json.text — sem custo de API externa."
+      "position": [680, 300],
+      "notes": "Faz upload do PDF para a OpenAI Files API.\nRetorna um file_id que será usado no Chat Completion.\nCredential: OpenAI API Key configurada no n8n."
     },
     {
       "parameters": {
@@ -35,87 +50,113 @@
         "operation": "create",
         "model": {
           "__rl": true,
-          "value": "gpt-4o-mini",
+          "value": "gpt-4o",
           "mode": "list"
         },
         "messages": {
           "values": [
             {
               "role": "user",
-              "content": "You are an elite tech recruiter. You are brutally honest, sarcastic, and have zero patience for corporate buzzwords. Read this resume: {{ $json.text }}. Return ONLY a strict JSON with two main keys: 1) 'teaser_gratis' containing 'employability_score' (X/100), 'ats_rejection_chance' (X%), and 'hook_message' (one vague, panic-inducing sentence about a catastrophic error found). 2) 'resultado_completo' containing 'brutal_roast' (a cruel but funny paragraph judging the resume), 'red_flags' (array of 3 terrible cliches found), and 'rewritten_summary' (a perfectly optimized, ATS-friendly professional summary to fix their mess)."
+              "content": "={{ 'You are an elite tech recruiter and career coach. You are brutally honest and have zero patience for corporate buzzwords. Analyze the attached resume PDF. Return ONLY a strict JSON with the following keys:\\n\\n1) \\'employability_score\\': (number 0-100)\\n2) \\'ats_rejection_chance\\': (number 0-100, percentage)\\n3) \\'hook_message\\': (one direct sentence describing the biggest problem found)\\n4) \\'brutal_roast\\': (a direct and funny paragraph exposing all the flaws)\\n5) \\'red_flags\\': (array of exactly 3 terrible clichés or problems found)\\n6) \\'improvement_tips\\': (array of 5 specific and actionable tips to improve this resume)\\n7) \\'rewritten_summary\\': (a perfectly optimized, ATS-friendly professional summary replacing their current one)\\n\\nFile ID: ' + $json.id }}"
             }
           ]
         },
         "options": {
           "responseFormat": "json_object"
+        },
+        "additionalFields": {
+          "attachments": [
+            {
+              "file_id": "={{ $json.id }}",
+              "tools": [{ "type": "file_search" }]
+            }
+          ]
         }
       },
-      "id": "a1b2c3d4-0003-0003-0003-000000000003",
-      "name": "OpenAI - Analisar Currículo",
+      "id": "node-04-openai-analyze",
+      "name": "OpenAI GPT-4o - Analisa Currículo",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1,
-      "position": [720, 300],
-      "notes": "Model: gpt-4o-mini. Response Format: json_object. Configure sua credential OpenAI nas Settings do n8n."
+      "position": [900, 300],
+      "notes": "Manda o PDF (via file_id) + prompt para o GPT-4o.\nResponse Format: json_object garante JSON limpo.\nO nó anterior retorna o file_id em $json.id"
     },
     {
       "parameters": {
-        "operation": "insert",
-        "schema": {
-          "__rl": true,
-          "value": "public",
-          "mode": "list"
-        },
-        "table": {
+        "jsCode": "// Parse do response do GPT-4o e montagem do objeto final\nconst resumeId = $('Code - Extrai id e binário').first().json.id;\nconst content = $input.first().json.message?.content || $input.first().json.choices?.[0]?.message?.content;\n\nlet parsed;\ntry {\n  parsed = typeof content === 'string' ? JSON.parse(content) : content;\n} catch(e) {\n  throw new Error('GPT-4o não retornou JSON válido: ' + content);\n}\n\nreturn [{\n  json: {\n    resume_id: resumeId,\n    employability_score: parsed.employability_score,\n    ats_rejection_chance: parsed.ats_rejection_chance,\n    hook_message: parsed.hook_message,\n    brutal_roast: parsed.brutal_roast,\n    red_flags: parsed.red_flags,\n    improvement_tips: parsed.improvement_tips,\n    rewritten_summary: parsed.rewritten_summary,\n    status: 'analyzed',\n    created_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "node-05-parse-response",
+      "name": "Code - Parse e Monta Objeto Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "notes": "Faz JSON.parse do response do GPT-4o.\nMonta o objeto completo com resume_id e todos os campos.\nJoga erro se o JSON vier quebrado."
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": {
           "__rl": true,
           "value": "resume_roasts",
-          "mode": "list"
+          "mode": "name"
         },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "id": "={{ $('Webhook POST /upload-resume').item.json.body.id }}",
-            "teaser_gratis": "={{ JSON.stringify($json.message.content.teaser_gratis) }}",
-            "resultado_completo": "={{ JSON.stringify($json.message.content.resultado_completo) }}",
-            "status_pagamento": false
-          }
+        "dataToInsert": "defineBelow",
+        "insertFields": {
+          "values": [
+            { "fieldName": "resume_id", "fieldValue": "={{ $json.resume_id }}" },
+            { "fieldName": "employability_score", "fieldValue": "={{ $json.employability_score }}" },
+            { "fieldName": "ats_rejection_chance", "fieldValue": "={{ $json.ats_rejection_chance }}" },
+            { "fieldName": "hook_message", "fieldValue": "={{ $json.hook_message }}" },
+            { "fieldName": "brutal_roast", "fieldValue": "={{ $json.brutal_roast }}" },
+            { "fieldName": "red_flags", "fieldValue": "={{ JSON.stringify($json.red_flags) }}" },
+            { "fieldName": "improvement_tips", "fieldValue": "={{ JSON.stringify($json.improvement_tips) }}" },
+            { "fieldName": "rewritten_summary", "fieldValue": "={{ $json.rewritten_summary }}" },
+            { "fieldName": "status", "fieldValue": "analyzed" },
+            { "fieldName": "created_at", "fieldValue": "={{ $json.created_at }}" }
+          ]
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0004-0004-0004-000000000004",
-      "name": "Postgres - Insert resume_roasts",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [960, 300],
-      "notes": "Insere o registro com status_pagamento=false. O resultado_completo fica bloqueado até o pagamento."
+      "id": "node-06-n8n-table",
+      "name": "n8n Data Store - Insert resume_roasts",
+      "type": "n8n-nodes-base.n8nTrainingCustomDataService",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "notes": "Salva o resultado na tabela interna do n8n.\nUse o nó 'n8n Training Custom Data' ou 'Custom Data Store' dependendo da sua versão.\nTabela: resume_roasts"
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify($('OpenAI - Analisar Currículo').item.json.message.content.teaser_gratis) }}",
+        "responseBody": "={{ JSON.stringify({\n  resume_id: $('Code - Parse e Monta Objeto Final').first().json.resume_id,\n  employability_score: $('Code - Parse e Monta Objeto Final').first().json.employability_score,\n  ats_rejection_chance: $('Code - Parse e Monta Objeto Final').first().json.ats_rejection_chance,\n  hook_message: $('Code - Parse e Monta Objeto Final').first().json.hook_message,\n  brutal_roast: $('Code - Parse e Monta Objeto Final').first().json.brutal_roast,\n  red_flags: $('Code - Parse e Monta Objeto Final').first().json.red_flags,\n  improvement_tips: $('Code - Parse e Monta Objeto Final').first().json.improvement_tips,\n  rewritten_summary: $('Code - Parse e Monta Objeto Final').first().json.rewritten_summary\n}) }}",
         "options": {
           "responseCode": 200
         }
       },
-      "id": "a1b2c3d4-0005-0005-0005-000000000005",
-      "name": "Respond to Webhook - Retorna Teaser",
+      "id": "node-07-respond",
+      "name": "Respond to Webhook - Resultado Completo",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1200, 300],
-      "notes": "Retorna ao front-end SOMENTE o teaser_gratis. O brutal_roast fica trancado no banco."
+      "position": [1560, 300],
+      "notes": "Retorna o resultado completo para o front-end.\nNesta fase (sem pagamento), tudo é liberado.\nO front usa o resume_id para depois chamar o Fluxo 2 se o usuário quiser o currículo reescrito personalizado."
     }
   ],
   "connections": {
     "Webhook POST /upload-resume": {
-      "main": [[{ "node": "Extract from File (PDF to Text)", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Code - Extrai id e binário", "type": "main", "index": 0 }]]
     },
-    "Extract from File (PDF to Text)": {
-      "main": [[{ "node": "OpenAI - Analisar Currículo", "type": "main", "index": 0 }]]
+    "Code - Extrai id e binário": {
+      "main": [[{ "node": "OpenAI - Upload do PDF", "type": "main", "index": 0 }]]
     },
-    "OpenAI - Analisar Currículo": {
-      "main": [[{ "node": "Postgres - Insert resume_roasts", "type": "main", "index": 0 }]]
+    "OpenAI - Upload do PDF": {
+      "main": [[{ "node": "OpenAI GPT-4o - Analisa Currículo", "type": "main", "index": 0 }]]
     },
-    "Postgres - Insert resume_roasts": {
-      "main": [[{ "node": "Respond to Webhook - Retorna Teaser", "type": "main", "index": 0 }]]
+    "OpenAI GPT-4o - Analisa Currículo": {
+      "main": [[{ "node": "Code - Parse e Monta Objeto Final", "type": "main", "index": 0 }]]
+    },
+    "Code - Parse e Monta Objeto Final": {
+      "main": [[{ "node": "n8n Data Store - Insert resume_roasts", "type": "main", "index": 0 }]]
+    },
+    "n8n Data Store - Insert resume_roasts": {
+      "main": [[{ "node": "Respond to Webhook - Resultado Completo", "type": "main", "index": 0 }]]
     }
   },
   "settings": {

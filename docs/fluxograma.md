@@ -1,133 +1,168 @@
-# Resume Roast - Fluxograma do Back-end
+# Resume Roast - Fluxograma
 
-## Visão Geral
+## Visão Geral do Sistema
 
 ```mermaid
 flowchart TD
     subgraph FRONT["🖥️ FRONT-END"]
-        A([Usuário faz upload\ndo PDF]) --> B[Gera UUID no front\nid = crypto.randomUUID]
+        A([Usuário faz upload do PDF]) --> B[Gera UUID\ncrypto.randomUUID]
         B --> C[POST /upload-resume\nmultipart: file + id]
     end
 
-    subgraph FLUXO1["⚙️ N8N - FLUXO 1: Processamento"]
-        D[Webhook\nPOST /upload-resume] --> E[Extract from File\nPDF → Texto Puro]
-        E --> F[OpenAI gpt-4o-mini\nRetorna JSON estrito]
-        F --> G[(Postgres INSERT\nresume_roasts\nstatus_pagamento = FALSE)]
-        G --> H[Respond to Webhook\nRetorna SOMENTE\nteaser_gratis]
+    subgraph FLUXO1["⚙️ N8N - FLUXO 1: Análise Completa"]
+        D[Webhook\nPOST /upload-resume] --> E[Code\nValida id + binário]
+        E --> F[OpenAI Files API\nUpload do PDF]
+        F --> G[GPT-4o\nAnalisa PDF direto\nRetorna JSON completo]
+        G --> H[Code\nParse + Monta objeto]
+        H --> I[(n8n Data Store\nINSERT resume_roasts\nstatus = analyzed)]
+        I --> J[Respond 200\nResultado COMPLETO]
     end
 
-    subgraph BANCO["🗄️ BANCO DE DADOS"]
-        I[(Tabela: resume_roasts\n─────────────────\nid VARCHAR PK\nstatus_pagamento BOOLEAN\nteaser_gratis JSONB\nresultado_completo JSONB\ncreated_at / updated_at)]
+    subgraph RESULTADO["📊 FRONT-END - Exibe Resultado"]
+        K[Mostra Score\nRoast + Red Flags\nImprovement Tips] --> L{Usuário escolhe}
+        L -- Grátis --> M[Exibe improvement_tips\nJá incluído na resposta]
+        L -- Premium --> N[POST /gerar-curriculo\nresume_id + target_role]
     end
 
-    subgraph PAGAMENTO["💳 GATEWAY DE PAGAMENTO"]
-        J[Stripe / LemonSqueezy\nMercado Pago] --> K[POST /webhook-pagamento\nmetadata.resume_id = id]
-    end
-
-    subgraph FLUXO2["⚙️ N8N - FLUXO 2: Liberação"]
-        L[Webhook\nPOST /webhook-pagamento] --> M[(Postgres UPDATE\nstatus_pagamento = TRUE\nWHERE id = resume_id)]
-        M --> N[Respond 200 OK\npara o gateway]
-    end
-
-    subgraph RESULTADO["🔓 FRONT-END - Desbloqueio"]
-        O[GET /resultado/:id\nVerifica status_pagamento] --> P{status_pagamento\n= TRUE?}
-        P -- SIM --> Q[Exibe resultado_completo\nBrutal Roast + Currículo Reescrito]
-        P -- NÃO --> R[Redireciona para\nCheckout]
+    subgraph FLUXO2["⚙️ N8N - FLUXO 2: Currículo Premium"]
+        O[Webhook\nPOST /gerar-curriculo] --> P[Code\nValida resume_id]
+        P --> Q[(n8n Data Store\nGET resume_roasts\nWHERE resume_id)]
+        Q --> R[Code\nMonta prompt rico\ncom contexto original]
+        R --> S[GPT-4o\nGera currículo reescrito\nnovo summary + skills + bullets]
+        S --> T[Code\nParse + calcula\nscore_improvement]
+        T --> U[(n8n Data Store\nUPDATE resume_roasts\nstatus = resume_generated)]
+        U --> V[Respond 200\nCurrículo Completo]
     end
 
     C --> D
-    H --> |teaser_gratis| FRONT
-    G --> |grava| BANCO
-    K --> L
-    M --> |atualiza| BANCO
-    FRONT --> |clica em Pagar| J
+    J --> |resultado completo| RESULTADO
+    N --> O
+    V --> |currículo reescrito| FRONT
 ```
 
 ---
 
-## Fluxo 1 — Detalhado
+## Fluxo 1 — Sequência Detalhada
 
 ```mermaid
 sequenceDiagram
     participant FE as Front-end
     participant WH as Webhook n8n
-    participant PDF as Extract PDF
-    participant AI as OpenAI
-    participant DB as PostgreSQL
+    participant OA as OpenAI Files API
+    participant GPT as GPT-4o
+    participant DS as n8n Data Store
 
     FE->>WH: POST /upload-resume (multipart: file, id)
-    WH->>PDF: Passa binário do PDF
-    PDF->>AI: Texto extraído do PDF
-    AI->>AI: Processa prompt + gera JSON
-    AI->>DB: INSERT resume_roasts (id, teaser, resultado, status=FALSE)
-    DB-->>AI: OK
-    AI-->>WH: teaser_gratis JSON
-    WH-->>FE: HTTP 200 { employability_score, ats_rejection_chance, hook_message }
+    WH->>WH: Code - valida id + extrai binário
+    WH->>OA: Upload PDF binário
+    OA-->>WH: file_id
+    WH->>GPT: Chat Completion (file_id + prompt)
+    GPT-->>WH: JSON { employability_score, brutal_roast, red_flags, improvement_tips, rewritten_summary... }
+    WH->>WH: Code - parse JSON + monta objeto
+    WH->>DS: INSERT resume_roasts (resume_id, todos os campos, status=analyzed)
+    DS-->>WH: OK
+    WH-->>FE: HTTP 200 - Resultado completo
 ```
 
 ---
 
-## Fluxo 2 — Detalhado
+## Fluxo 2 — Sequência Detalhada
 
 ```mermaid
 sequenceDiagram
-    participant GW as Gateway (Stripe/etc)
-    participant WH as Webhook n8n
-    participant DB as PostgreSQL
     participant FE as Front-end
+    participant WH as Webhook n8n
+    participant DS as n8n Data Store
+    participant GPT as GPT-4o
 
-    GW->>WH: POST /webhook-pagamento (metadata.resume_id = id)
-    WH->>DB: UPDATE resume_roasts SET status_pagamento=TRUE WHERE id=resume_id
-    DB-->>WH: OK
-    WH-->>GW: HTTP 200 { ok: true }
-    FE->>DB: GET /resultado/:id (verifica status_pagamento)
-    DB-->>FE: resultado_completo desbloqueado
+    FE->>WH: POST /gerar-curriculo { resume_id, target_role?, target_company? }
+    WH->>WH: Code - valida resume_id
+    WH->>DS: GET resume_roasts WHERE resume_id = id
+    DS-->>WH: Dados da análise original
+    WH->>WH: Code - monta prompt com contexto + target role
+    WH->>GPT: Chat Completion (prompt rico com análise original)
+    GPT-->>WH: JSON { new_summary, key_skills, experience_bullets, ats_keywords, cover_letter_opening... }
+    WH->>WH: Code - parse + calcula score_improvement
+    WH->>DS: UPDATE resume_roasts SET new_resume_generated=true, status=resume_generated
+    DS-->>WH: OK
+    WH-->>FE: HTTP 200 - Currículo reescrito completo
 ```
 
 ---
 
-## Estrutura do Banco
+## Tabela interna n8n: `resume_roasts`
 
-```mermaid
-erDiagram
-    RESUME_ROASTS {
-        varchar id PK "UUID gerado no front"
-        boolean status_pagamento "DEFAULT false"
-        jsonb teaser_gratis "isca gratuita"
-        jsonb resultado_completo "roast bloqueado"
-        timestamptz created_at
-        timestamptz updated_at
-    }
-```
+### Campos criados pelo Fluxo 1
 
----
-
-## JSON esperado da IA
-
-### `teaser_gratis`
-```json
-{
-  "employability_score": "34/100",
-  "ats_rejection_chance": "91%",
-  "hook_message": "There is a catastrophic error in your resume that guarantees automatic rejection by 9 out of 10 ATS systems."
-}
-```
-
-### `resultado_completo`
-```json
-{
-  "brutal_roast": "Your resume looks like it was written by someone who Googled 'how to write a resume' in 2009 and never looked back...",
-  "red_flags": ["results-driven", "team player", "synergy"],
-  "rewritten_summary": "Senior Software Engineer with 6+ years building scalable distributed systems..."
-}
-```
-
----
-
-## Metadados por Gateway
-
-| Gateway | Campo no payload | Path no n8n |
+| Campo | Tipo | Descrição |
 |---|---|---|
-| **Stripe** | `metadata.resume_id` | `$json.body.data.object.metadata.resume_id` |
-| **LemonSqueezy** | `custom_data.resume_id` | `$json.body.meta.custom_data.resume_id` |
-| **Mercado Pago** | `external_reference` | `$json.body.external_reference` |
+| `resume_id` | String | UUID gerado no front-end (chave de busca) |
+| `employability_score` | Number | Score 0-100 |
+| `ats_rejection_chance` | Number | % de rejeição por ATS |
+| `hook_message` | String | Frase do maior problema encontrado |
+| `brutal_roast` | String | Parágrafo de crítica |
+| `red_flags` | JSON String | Array de 3 clichês/problemas |
+| `improvement_tips` | JSON String | Array de 5 dicas acionáveis |
+| `rewritten_summary` | String | Summary otimizado |
+| `status` | String | `analyzed` |
+| `created_at` | String | ISO timestamp |
+
+### Campos adicionados pelo Fluxo 2
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `new_resume_generated` | Boolean | `true` quando o Fluxo 2 rodar |
+| `new_summary` | String | Novo summary gerado |
+| `key_skills` | JSON String | Array de 10-15 skills |
+| `experience_bullets` | JSON String | Array de bullets STAR com números |
+| `ats_keywords` | JSON String | Array de 15 keywords para ATS |
+| `final_score_prediction` | Number | Score previsto após melhorias |
+| `cover_letter_opening` | String | Abertura da cover letter |
+| `status` | String | `resume_generated` |
+
+---
+
+## JSON de Resposta por Endpoint
+
+### `POST /upload-resume` → Resposta
+
+```json
+{
+  "resume_id": "550e8400-e29b-41d4-a716-446655440000",
+  "employability_score": 34,
+  "ats_rejection_chance": 91,
+  "hook_message": "Your resume has a formatting issue that causes automatic rejection by 9 out of 10 ATS systems.",
+  "brutal_roast": "This resume reads like it was written by someone who Googled 'resume template 2009' and never looked back...",
+  "red_flags": ["results-driven", "team player", "passionate about synergy"],
+  "improvement_tips": [
+    "Replace buzzwords with specific achievements and numbers",
+    "Add a measurable impact to every bullet point",
+    "Remove the Objective section and replace with a strong Summary",
+    "List your tech stack in a dedicated Skills section",
+    "Use reverse chronological order consistently"
+  ],
+  "rewritten_summary": "Senior Software Engineer with 6+ years building scalable APIs and distributed systems..."
+}
+```
+
+### `POST /gerar-curriculo` → Resposta
+
+```json
+{
+  "resume_id": "550e8400-e29b-41d4-a716-446655440000",
+  "original_score": 34,
+  "final_score_prediction": 87,
+  "score_improvement": 53,
+  "new_summary": "Senior Backend Engineer with 6+ years building high-performance REST APIs...",
+  "key_skills": ["Node.js", "TypeScript", "PostgreSQL", "Docker", "AWS", "Redis", "..."],
+  "experience_bullets": [
+    "Reduced API response time by 40% by implementing Redis caching layer",
+    "Led migration of monolith to microservices serving 50k+ daily users",
+    "..."
+  ],
+  "certifications_suggestions": ["AWS Solutions Architect", "CKA - Kubernetes", "MongoDB Developer"],
+  "ats_keywords": ["REST API", "microservices", "CI/CD", "Docker", "Kubernetes", "..."],
+  "cover_letter_opening": "With 6+ years architecting backend systems that have scaled to handle millions of requests...",
+  "generated_at": "2026-03-19T22:21:00.000Z"
+}
+```
