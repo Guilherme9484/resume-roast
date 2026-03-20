@@ -1,0 +1,161 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "ArXE8s9tmJPsI1EC",
+          "mode": "list",
+          "cachedResultName": "resume_roasts",
+          "cachedResultUrl": "/projects/lvog2T4fK6vD8HRh/datatables/ArXE8s9tmJPsI1EC"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "resume_id": "={{ $json.resume_id }}",
+            "employability_score": "={{ $json.employability_score }}",
+            "ats_rejection_chance": "={{ $json.ats_rejection_chance }}",
+            "hook_message": "={{ $json.hook_message }}",
+            "brutal_roast": "={{ $json.brutal_roast }}",
+            "red_flags": "={{ $json.red_flags }}",
+            "improvement_tips": "={{ $json.improvement_tips }}",
+            "rewritten_summary": "={{ $json.rewritten_summary }}",
+            "questions": "={{ $json.questions }}",
+            "status": "={{ $json.status }}",
+            "created_at": "={{ $json.created_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "resume_id",
+              "displayName": "resume_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "employability_score",
+              "displayName": "employability_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ats_rejection_chance",
+              "displayName": "ats_rejection_chance",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "hook_message",
+              "displayName": "hook_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "brutal_roast",
+              "displayName": "brutal_roast",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "red_flags",
+              "displayName": "red_flags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "improvement_tips",
+              "displayName": "improvement_tips",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "rewritten_summary",
+              "displayName": "rewritten_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "questions",
+              "displayName": "questions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "5a6ab569-9d40-472a-8a94-1db622d0ffd2",
+      "name": "DataTable - Insert resume_roasts1",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [1360, 32]
+    }
+  ],
+  "connections": {
+    "DataTable - Insert resume_roasts1": {
+      "main": [[]]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "5c28372f8539d1fc026bc6d1c9263c72b310a93650bd9ed58d2c3834b89e10ae"
+  }
+}
