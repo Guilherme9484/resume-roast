@@ -1,5 +1,5 @@
 {
-  "name": "Fluxo 3 - Chat Interativo + Geração do Currículo",
+  "name": "Fluxo 3 — Chat Perguntas (Postgres)",
   "nodes": [
     {
       "parameters": {
@@ -8,89 +8,83 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "chat-node-01",
+      "id": "9a5bc8f4-ae06-4065-bb51-e02ba5bcbddd",
       "name": "Webhook POST /chat",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 300],
-      "notes": "Body esperado (JSON):\n{\n  \"resume_id\": \"uuid-do-upload\",  // obrigatório — chave da memória\n  \"message\": \"Resposta do usuário\" // texto livre ou respostas às perguntas\n}\n\nO front chama este endpoint a cada mensagem do usuário.\nQuando o Agent terminar as perguntas, retorna { done: true, curriculo: {...} }"
+      "position": [32, 480],
+      "webhookId": "ca152243-fd7e-4e09-bce4-7b55fbb215f1",
+      "notes": "Body esperado (JSON):\n{\n  \"resume_id\": \"uuid-do-upload\",\n  \"message\": \"Resposta do usuário ou bloco de respostas numeradas\"\n}"
     },
     {
       "parameters": {
         "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst resume_id = body.resume_id;\nconst message = body.message;\n\nif (!resume_id) throw new Error('resume_id obrigatório no body.');\nif (!message || message.trim() === '') throw new Error('message não pode ser vazio.');\n\nreturn [{ json: { resume_id, message } }];"
       },
-      "id": "chat-node-02",
+      "id": "086e7867-61a9-4517-b149-24ebfca680f6",
       "name": "Code - Valida Body",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 300],
-      "notes": "Valida resume_id e message.\nAmbos obrigatórios."
+      "position": [256, 480],
+      "notes": "Valida resume_id e message."
     },
     {
       "parameters": {
-        "operation": "get",
-        "dataTableId": {
-          "__rl": true,
-          "value": "ArXE8s9tmJPsI1EC",
-          "mode": "list",
-          "cachedResultName": "resume_roasts",
-          "cachedResultUrl": "/projects/lvog2T4fK6vD8HRh/datatables/ArXE8s9tmJPsI1EC"
-        },
-        "filters": {
-          "conditions": [
-            {
-              "keyName": "resume_id",
-              "keyValue": "={{ $json.resume_id }}"
-            }
-          ]
+        "operation": "executeQuery",
+        "query": "SELECT\n  resume_id,\n  employability_score,\n  ats_rejection_chance,\n  red_flags::text       AS red_flags,\n  improvement_tips::text AS improvement_tips,\n  questions::text       AS questions,\n  original_text,\n  status\nFROM resume_roasts\nWHERE resume_id = '{{ $json.resume_id }}'\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "pg-get-roast",
+      "name": "Postgres - GET resume_roasts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [464, 480],
+      "credentials": {
+        "postgres": {
+          "id": "BgdlaXsBdEjEwstv",
+          "name": "Postgres account"
         }
       },
-      "id": "chat-node-03",
-      "name": "DataTable - Busca Análise Original",
-      "type": "n8n-nodes-base.dataTable",
-      "typeVersion": 1,
-      "position": [440, 300],
-      "notes": "Busca os dados da análise original (brutal_roast, red_flags, etc.)\npara o Agent ter contexto completo ao conversar."
+      "notes": "Substitui o DataTable Get.\nBusca a análise original para contexto do Agent."
     },
     {
       "parameters": {
-        "jsCode": "const analysis = $input.first().json;\nconst meta = $('Code - Valida Body').first().json;\n\nif (!analysis || !analysis.resume_id) {\n  throw new Error(`Análise não encontrada para resume_id: ${meta.resume_id}`);\n}\n\nconst redFlags = typeof analysis.red_flags === 'string' ? JSON.parse(analysis.red_flags) : (analysis.red_flags || []);\nconst tips = typeof analysis.improvement_tips === 'string' ? JSON.parse(analysis.improvement_tips) : (analysis.improvement_tips || []);\nconst questions = typeof analysis.questions === 'string' ? JSON.parse(analysis.questions) : (analysis.questions || []);\n\nreturn [{\n  json: {\n    resume_id: meta.resume_id,\n    message: meta.message,\n    context: {\n      employability_score: analysis.employability_score,\n      brutal_roast: analysis.brutal_roast,\n      red_flags: redFlags,\n      improvement_tips: tips,\n      rewritten_summary: analysis.rewritten_summary,\n      questions_asked: questions\n    }\n  }\n}];"
+        "jsCode": "const row = $input.first().json;\nconst body = $('Code - Valida Body').first().json;\n\nif (!row || !row.resume_id) {\n  throw new Error('Resume não encontrado para id: ' + body.resume_id);\n}\n\nreturn [{\n  json: {\n    resume_id:           body.resume_id,\n    message:             body.message,\n    employability_score: row.employability_score ?? '',\n    red_flags:           row.red_flags ?? '[]',\n    improvement_tips:    row.improvement_tips ?? '[]',\n    original_text:       row.original_text ?? ''\n  }\n}];\n"
       },
-      "id": "chat-node-04",
-      "name": "Code - Prepara Contexto",
+      "id": "73b48af2-7e3f-44d1-ba8b-71457c39962e",
+      "name": "Code - Monta Contexto",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 300],
-      "notes": "Monta o contexto completo da análise para o Agent.\nDeserializa arrays de strings (red_flags, tips, questions)."
+      "position": [672, 480],
+      "notes": "Monta contexto completo para o AI Agent."
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.message }}",
+        "text": "=IMPORTANTE: Retorne APENAS JSON puro. Zero texto fora do objeto JSON.\n\nResume ID: {{ $json.resume_id }}\n\nCONTEXTO DA ANÁLISE:\n- Score de empregabilidade: {{ $json.employability_score }}/100\n- Red flags identificados: {{ $json.red_flags }}\n- Melhorias recomendadas: {{ $json.improvement_tips }}\n\nCURRÍCULO ORIGINAL:\n{{ $json.original_text }}\n\nNOVA RESPOSTA DO CANDIDATO:\n{{ $json.message }}\n\nINSTRUÇÃO:\nCom base na memória acumulada da conversa e na resposta acima:\n- Se ainda faltam informações essenciais, retorne: {\"done\": false, \"message\": \"<próxima pergunta objetiva>\"}\n- Se já tem informações suficientes para gerar o currículo, retorne o JSON completo com \"done\": true e \"final_resume\" preenchido.\n",
         "options": {
-          "systemMessage": "={{ 'Você é um coach de carreira de elite conversando com um candidato para criar o currículo mais poderoso possível para ele.\\n\\nContexto da análise do currículo do candidato:\\n- Score de empregabilidade: ' + $json.context.employability_score + '/100\\n- Roast brutal: ' + $json.context.brutal_roast + '\\n- Red flags: ' + JSON.stringify($json.context.red_flags) + '\\n- Dicas de melhoria: ' + JSON.stringify($json.context.improvement_tips) + '\\n- Summary reescrito: ' + $json.context.rewritten_summary + '\\n\\nSua missão:\\n1. Fazer até 10 perguntas estratégicas ao candidato (uma ou duas por vez, de forma natural e conversacional) para entender melhor:\\n   - Conquistas concretas com números e impacto\\n   - Projetos mais relevantes já realizados\\n   - Cargo e empresa alvo\\n   - Soft skills demonstradas em situações reais\\n   - Certificações e cursos relevantes\\n   - Lacunas no histórico (se houver)\\n   - Diferenciais competitivos únicos\\n   - Preferência de trabalho (remoto/híbrido/presencial)\\n   - Expectativa salarial\\n   - Idiomas e nível\\n\\n2. Quando você tiver coletado informações suficientes (máximo 10 trocas), use a tool \\'gerar_curriculo\\' para criar o currículo final.\\n\\n3. Enquanto estiver fazendo perguntas, responda de forma direta e amigável. NÃO use JSON nas mensagens de conversa — apenas texto natural.\\n\\n4. Só use a tool \\'gerar_curriculo\\' quando tiver informações suficientes ou o candidato disser que quer gerar o currículo.' }}"
+          "systemMessage": "Você é um especialista em currículos de alto impacto para o mercado brasileiro, com foco em tecnologia e logística.\n\nCONTEXTO:\nVocê recebe o currículo original do candidato, uma análise crítica prévia e as respostas do candidato às perguntas estratégicas acumuladas na memória da conversa.\n\nSEU FLUXO:\n1. Faça no máximo 2 perguntas por vez, de forma natural e direta\n2. Quando tiver: cargo alvo, 2+ conquistas com números, formação e preferência de trabalho — gere o currículo\n3. Nunca invente dados — use apenas o que o candidato forneceu\n\nREGRAS DE OUTPUT — CRÍTICAS:\n- Retorne SOMENTE o objeto JSON abaixo\n- ZERO markdown, ZERO texto antes ou depois, ZERO ```json```\n- NUNCA use: \"busca\", \"procura\", \"almeja\", \"dinâmico\", \"proativo\", \"apaixonado\"\n- Todas as strings em português do Brasil\n- Conquistas SEMPRE com métricas (números, %, tempo, volume)\n\nENQUANTO COLETA INFORMAÇÕES:\n{\"done\": false, \"message\": \"<pergunta direta e objetiva>\"}\n\nQUANDO PRONTO PARA GERAR:\n{\n  \"done\": true,\n  \"message\": null,\n  \"resume_id\": \"<mesmo id recebido>\",\n  \"final_resume\": {\n    \"summary\": \"<cargo + anos de experiência + 2 conquistas com números>\",\n    \"experience\": [\n      {\n        \"company\": \"<empresa>\",\n        \"role\": \"<cargo específico>\",\n        \"period\": \"<mês/ano – mês/ano>\",\n        \"achievements\": [\n          \"<conquista mensurável 1>\",\n          \"<conquista mensurável 2>\",\n          \"<conquista mensurável 3>\"\n        ]\n      }\n    ],\n    \"skills\": [\"<skill 1>\", \"<skill 2>\", \"<skill 3>\", \"<skill 4>\", \"<skill 5>\"],\n    \"education\": [\n      {\n        \"institution\": \"<instituição>\",\n        \"degree\": \"<curso>\",\n        \"year\": \"<ano de conclusão ou previsão>\"\n      }\n    ],\n    \"certifications\": [\"<certificação 1>\", \"<certificação 2>\"],\n    \"differentials\": \"<parágrafo curto com o diferencial único do candidato>\"\n  }\n}\n"
         }
       },
-      "id": "chat-node-05",
+      "id": "5c627d3a-27a2-457f-b681-b9b3f422f255",
       "name": "AI Agent - Chat Coach",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3,
-      "position": [880, 300],
-      "notes": "Agent conversacional com memória por resume_id.\nFaz perguntas uma a duas por vez de forma natural.\nQuando pronto, usa a tool gerar_curriculo."
+      "position": [912, 480],
+      "notes": "Agent conversacional com memória por resume_id.\nQuando pronto, retorna done: true com final_resume."
     },
     {
       "parameters": {
-        "model": "llama-3.3-70b-versatile",
+        "model": "=qwen/qwen3-32b",
         "options": {}
       },
-      "id": "chat-node-06",
+      "id": "bb0def4e-b0d2-404d-acb8-14288f67b68a",
       "name": "Groq Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
-      "position": [752, 500],
+      "position": [864, 704],
       "credentials": {
         "groqApi": {
-          "id": "rNAey3eUeDioukUT",
+          "id": "Zs2d3aQggFKHeg1h",
           "name": "Groq account"
         }
       }
@@ -99,65 +93,62 @@
       "parameters": {
         "sessionIdType": "customKey",
         "sessionKey": "={{ $('Code - Valida Body').first().json.resume_id }}",
-        "contextWindowLength": 5
+        "contextWindowLength": 2
       },
-      "id": "chat-node-07",
-      "name": "Simple Memory",
-      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
       "typeVersion": 1.3,
-      "position": [896, 500],
-      "notes": "sessionKey = resume_id — mantém o histórico da conversa por candidato.\ncontextWindowLength = 5 — últimas 5 trocas (10 mensagens)."
-    },
-    {
-      "parameters": {
-        "name": "gerar_curriculo",
-        "description": "Use esta tool quando você tiver coletado informações suficientes do candidato e estiver pronto para gerar o currículo completo e personalizado. Passe todas as informações coletadas durante a conversa.",
-        "workflowId": {
-          "__rl": true,
-          "value": "",
-          "mode": "list"
-        },
-        "fields": {
-          "values": [
-            {
-              "name": "resume_id",
-              "value": "={{ $('Code - Valida Body').first().json.resume_id }}"
-            }
-          ]
+      "position": [1008, 704],
+      "id": "1211c3be-5791-4966-aff7-d2d55272cd02",
+      "name": "Postgres Chat Memory",
+      "credentials": {
+        "postgres": {
+          "id": "BgdlaXsBdEjEwstv",
+          "name": "Postgres account"
         }
-      },
-      "id": "chat-node-08",
-      "name": "Tool - Gerar Currículo",
-      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
-      "typeVersion": 2,
-      "position": [1040, 500],
-      "notes": "⚠️ Preencha o workflowId com o ID do Fluxo 2 (gerar-curriculo).\nO Agent chama esta tool quando terminar as perguntas."
+      }
     },
     {
       "parameters": {
-        "jsCode": "const agentOutput = $input.first().json.output || '';\n\n// Verifica se o Agent usou a tool (output contém o currículo em JSON)\nlet curriculo = null;\nlet done = false;\n\ntry {\n  const clean = agentOutput.replace(/```json|```/g, '').trim();\n  const parsed = JSON.parse(clean);\n  // Se parseou com sucesso e tem campos do currículo, é o resultado final\n  if (parsed.new_summary || parsed.key_skills) {\n    curriculo = parsed;\n    done = true;\n  }\n} catch(e) {\n  // Não é JSON — ainda está fazendo perguntas\n  done = false;\n}\n\nreturn [{\n  json: {\n    done,\n    message: done ? null : agentOutput,\n    curriculo: done ? curriculo : null\n  }\n}];"
+        "jsCode": "const raw = $input.first().json.output || \"\";\nconst body = $('Code - Valida Body').first().json || {};\n\n// Remove <think> do qwen3\nconst stripped = raw.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\n\nlet parsed;\ntry {\n  const match = stripped.match(/\\{[\\s\\S]*\\}/);\n  if (!match) throw new Error('Sem JSON');\n  parsed = JSON.parse(match[0]);\n} catch (e) {\n  return [{ json: { done: false, message: stripped, curriculo: null } }];\n}\n\nif (!parsed.done || !parsed.final_resume) {\n  return [{ json: { done: false, message: parsed.message || stripped, curriculo: null } }];\n}\n\nconst c = parsed.final_resume;\n\nreturn [{\n  json: {\n    // Para o front\n    done:     true,\n    message:  null,\n    curriculo: c,\n\n    // Para o INSERT no Postgres\n    resume_id:       parsed.resume_id || body.resume_id,\n    summary:         c.summary        || '',\n    experience:      JSON.stringify(c.experience      || []),\n    skills:          JSON.stringify(c.skills          || []),\n    education:       JSON.stringify(c.education       || []),\n    certifications:  JSON.stringify(c.certifications  || []),\n    differentials:   c.differentials  || ''\n  }\n}];\n"
       },
-      "id": "chat-node-09",
-      "name": "Code - Detecta Done ou Pergunta",
+      "id": "60595959-954c-4869-9f97-836fa1c33da5",
+      "name": "Code - Parse Final Resume",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1100, 300],
-      "notes": "Verifica se o Agent terminou (retornou JSON do currículo) ou ainda está fazendo perguntas.\ndone=false → devolve mensagem de texto ao front\ndone=true → devolve curriculo completo ao front"
+      "position": [1280, 480],
+      "notes": "Parse do output do Agent.\nSe done=false, retorna mensagem ao front.\nSe done=true, prepara dados para INSERT."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO resume_finals (\n  resume_id,\n  source_service,\n  summary,\n  experience,\n  skills,\n  education,\n  certifications,\n  differentials,\n  status,\n  created_at\n) VALUES (\n  '{{ $json.resume_id }}',\n  'resume-roast',\n  '{{ $json.summary.replace(/'/g, \"''\") }}',\n  '{{ $json.experience }}'::jsonb,\n  '{{ $json.skills }}'::jsonb,\n  '{{ $json.education }}'::jsonb,\n  '{{ $json.certifications }}'::jsonb,\n  '{{ $json.differentials.replace(/'/g, \"''\") }}',\n  'pending_payment',\n  NOW()\n)\nON CONFLICT (resume_id)\nDO UPDATE SET\n  summary        = EXCLUDED.summary,\n  experience     = EXCLUDED.experience,\n  skills         = EXCLUDED.skills,\n  education      = EXCLUDED.education,\n  certifications = EXCLUDED.certifications,\n  differentials  = EXCLUDED.differentials,\n  status         = 'pending_payment',\n  updated_at     = NOW()\nRETURNING resume_id, status;",
+        "options": {}
+      },
+      "id": "pg-insert-final",
+      "name": "Postgres - INSERT resume_finals",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1504, 480],
+      "credentials": {
+        "postgres": {
+          "id": "BgdlaXsBdEjEwstv",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "Substitui o DataTable Insert de resume_finals.\nSó executa quando done=true (currículo gerado).\nON CONFLICT = idempotente."
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({\n  resume_id: $('Code - Valida Body').first().json.resume_id,\n  done: $json.done,\n  message: $json.message,\n  curriculo: $json.curriculo\n}) }}",
-        "options": {
-          "responseCode": 200
-        }
+        "responseBody": "={{ JSON.stringify({\n  resume_id: $('Code - Valida Body').first().json.resume_id,\n  done:      $('Code - Parse Final Resume').first().json.done,\n  message:   $('Code - Parse Final Resume').first().json.message,\n  curriculo: $('Code - Parse Final Resume').first().json.curriculo\n}) }}",
+        "options": { "responseCode": 200 }
       },
-      "id": "chat-node-10",
+      "id": "75677e47-182d-469f-9bc9-2c61602744bb",
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1320, 300],
-      "notes": "Resposta ao front:\n\nEnquanto conversa:\n{ done: false, message: 'Pergunta do Agent', curriculo: null }\n\nQuando termina:\n{ done: true, message: null, curriculo: { new_summary, key_skills, ... } }\n\nO front detecta done=true e exibe o modal de pagamento (Pix)."
+      "position": [1744, 480],
+      "notes": "Enquanto conversa: { done: false, message: 'Pergunta', curriculo: null }\nQuando termina:   { done: true, message: null, curriculo: {...} }"
     }
   ],
   "connections": {
@@ -165,34 +156,32 @@
       "main": [[{ "node": "Code - Valida Body", "type": "main", "index": 0 }]]
     },
     "Code - Valida Body": {
-      "main": [[{ "node": "DataTable - Busca Análise Original", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Postgres - GET resume_roasts", "type": "main", "index": 0 }]]
     },
-    "DataTable - Busca Análise Original": {
-      "main": [[{ "node": "Code - Prepara Contexto", "type": "main", "index": 0 }]]
+    "Postgres - GET resume_roasts": {
+      "main": [[{ "node": "Code - Monta Contexto", "type": "main", "index": 0 }]]
     },
-    "Code - Prepara Contexto": {
+    "Code - Monta Contexto": {
       "main": [[{ "node": "AI Agent - Chat Coach", "type": "main", "index": 0 }]]
-    },
-    "AI Agent - Chat Coach": {
-      "main": [[{ "node": "Code - Detecta Done ou Pergunta", "type": "main", "index": 0 }]]
     },
     "Groq Chat Model": {
       "ai_languageModel": [[{ "node": "AI Agent - Chat Coach", "type": "ai_languageModel", "index": 0 }]]
     },
-    "Simple Memory": {
+    "Postgres Chat Memory": {
       "ai_memory": [[{ "node": "AI Agent - Chat Coach", "type": "ai_memory", "index": 0 }]]
     },
-    "Tool - Gerar Currículo": {
-      "ai_tool": [[{ "node": "AI Agent - Chat Coach", "type": "ai_tool", "index": 0 }]]
+    "AI Agent - Chat Coach": {
+      "main": [[{ "node": "Code - Parse Final Resume", "type": "main", "index": 0 }]]
     },
-    "Code - Detecta Done ou Pergunta": {
+    "Code - Parse Final Resume": {
+      "main": [[{ "node": "Postgres - INSERT resume_finals", "type": "main", "index": 0 }]]
+    },
+    "Postgres - INSERT resume_finals": {
       "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
     }
   },
-  "pinData": {},
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "5c28372f8539d1fc026bc6d1c9263c72b310a93650bd9ed58d2c3834b89e10ae"
-  },
-  "settings": { "executionOrder": "v1" }
+  }
 }

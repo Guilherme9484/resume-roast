@@ -1,5 +1,5 @@
 {
-  "name": "Fluxo 1 - Upload, Análise e Perguntas Iniciais",
+  "name": "Fluxo 1 — Upload Resume (Postgres)",
   "nodes": [
     {
       "parameters": {
@@ -8,14 +8,11 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "5b733399-dc04-49ed-ba91-fbded1e48aef",
-      "name": "Webhook POST /upload-resume1",
+      "id": "adbe2e9a-72c9-4d7e-845b-2306ec699822",
+      "name": "Webhook POST /upload-resume",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        176,
-        624
-      ],
+      "position": [48, 32],
       "webhookId": "c8174265-be45-4d86-8089-6713a5f055a0",
       "notes": "Recebe multipart/form-data.\nCampos esperados:\n- file: arquivo PDF (binário)\n- id: UUID gerado no front-end via query string (?id=uuid)"
     },
@@ -23,29 +20,23 @@
       "parameters": {
         "jsCode": "const id = $input.first().json.query?.id;\nconst binaryKey = Object.keys($input.first().binary || {})[0] || 'data';\n\nif (!id) throw new Error('Campo id não encontrado na query string.');\nif (!$input.first().binary?.[binaryKey]) throw new Error('Arquivo PDF não encontrado.');\n\nreturn [{\n  json: { id, binaryKey },\n  binary: $input.first().binary\n}];"
       },
-      "id": "b05ece35-b875-45df-916a-cd14a192fad8",
-      "name": "Code - Valida id e binário1",
+      "id": "bbfcb831-74a7-4242-9649-1d06178a4a49",
+      "name": "Code - Valida id e binário",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        400,
-        624
-      ],
-      "notes": "Valida que o id e o PDF vieram corretamente.\nDefine qual chave binária usar no próximo nó."
+      "position": [272, 32],
+      "notes": "Valida que o id e o PDF vieram corretamente."
     },
     {
       "parameters": {
         "operation": "pdf",
         "options": {}
       },
-      "id": "942bbd6b-303e-4f09-90bd-87bedf039e20",
+      "id": "bf4faaa7-4224-45b8-baf5-e2187dc7f06d",
       "name": "Extract from File - PDF to Text",
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
-      "position": [
-        624,
-        624
-      ],
+      "position": [496, 32],
       "notes": "Converte o PDF binário em texto puro.\nResultado disponível em $json.text"
     },
     {
@@ -53,35 +44,29 @@
         "promptType": "define",
         "text": "=Aqui está o texto completo do meu currículo:\n{{ $json.text }}\nLinguagem usada: {{ $json.info.Language }}",
         "options": {
-          "systemMessage": "Você é um recrutador de tecnologia de elite e coach de carreira.\nÉ brutalmente honesto e não tem paciência para buzzwords corporativos.\n\nQuando receber um currículo, analise com cuidado e retorne APENAS um JSON estrito — sem markdown, sem explicações, somente o objeto JSON puro.\n\nO JSON deve conter exatamente estas chaves:\n1. \"employability_score\": inteiro de 0 a 100\n2. \"ats_rejection_chance\": inteiro de 0 a 100 (% de chance de rejeição por ATS)\n3. \"hook_message\": uma frase direta descrevendo o maior problema encontrado\n4. \"brutal_roast\": um parágrafo direto e engraçado expondo todos os defeitos do currículo\n5. \"red_flags\": array com exatamente 3 strings — os piores clichês ou problemas encontrados\n6. \"improvement_tips\": array com exatamente 5 strings — dicas específicas e acionáveis para melhorar o currículo\n7. \"rewritten_summary\": um resumo profissional perfeitamente otimizado e compatível com ATS, substituindo o atual\n8. \"questions\": array com exatamente 10 perguntas estratégicas para entender melhor o candidato e poder criar um currículo personalizado e poderoso. As perguntas devem cobrir: conquistas com números, projetos relevantes, cargo alvo, empresa alvo, soft skills demonstradas, certificações, lacunas no histórico, diferenciais competitivos, preferência de trabalho (remoto/híbrido/presencial) e expectativa salarial.\n\nRetorne APENAS o JSON. Nenhum texto antes ou depois."
+          "systemMessage": "Você é um recrutador sênior de tecnologia, brutalmente honesto, com zero tolerância para buzzwords e currículo genérico.\n\nSua única função é analisar currículos e retornar um objeto JSON puro, sem markdown, sem texto antes ou depois, sem explicações.\n\nREGRAS ABSOLUTAS:\n- Retorne SOMENTE o JSON. Zero texto fora do objeto.\n- Nunca use markdown, nunca envolva em ```json\n- Nunca comece o brutal_roast com elogio — vá direto nos problemas\n- Seja cruel, específico e engraçado no brutal_roast\n- Todas as strings em português do Brasil\n- Se o input não for um currículo, retorne: {\"error\": \"Nenhum currículo identificado.\"}\n\nEstrutura OBRIGATÓRIA do JSON (todos os campos são obrigatórios):\n{\n  \"employability_score\": <inteiro 0-100>,\n  \"ats_rejection_chance\": <inteiro 0-100>,\n  \"hook_message\": \"<uma frase direta e impiedosa sobre o maior problema>\",\n  \"brutal_roast\": \"<parágrafo longo, direto e engraçado expondo TODOS os defeitos — nunca comece com elogio, seja específico sobre os problemas reais deste currículo>\",\n  \"red_flags\": [\"<problema específico 1>\", \"<problema específico 2>\", \"<problema específico 3>\"],\n  \"improvement_tips\": [\"<dica acionável e específica 1>\", \"<dica acionável e específica 2>\", \"<dica acionável e específica 3>\", \"<dica acionável e específica 4>\", \"<dica acionável e específica 5>\"],\n  \"rewritten_summary\": \"<resumo profissional que começa com cargo + anos de experiência + 2 conquistas mensuráveis. Nunca use 'busca' ou 'procura'. Otimizado para ATS com palavras-chave do setor>\",\n  \"questions\": [\n    \"<pergunta sobre conquista com número mensurável>\",\n    \"<pergunta sobre projeto mais relevante da carreira>\",\n    \"<pergunta sobre cargo alvo exato>\",\n    \"<pergunta sobre empresa ou setor alvo>\",\n    \"<pergunta sobre soft skill demonstrada em situação real>\",\n    \"<pergunta sobre certificações ou cursos relevantes>\",\n    \"<pergunta sobre lacuna ou mudança frequente no histórico>\",\n    \"<pergunta sobre diferencial competitivo em relação a outros candidatos>\",\n    \"<pergunta sobre preferência remoto/híbrido/presencial>\",\n    \"<pergunta sobre expectativa salarial e benefícios>\"\n  ]\n}\n\nO array \"questions\" é OBRIGATÓRIO e deve conter EXATAMENTE 10 itens.\nO array \"red_flags\" deve conter EXATAMENTE 3 itens.\nO array \"improvement_tips\" deve conter EXATAMENTE 5 itens.\n"
         }
       },
-      "id": "067bc657-2fe7-415b-9364-edc64702fbfc",
+      "id": "4b21edd8-9f16-46c1-a940-588d9a1a5f7b",
       "name": "AI Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3,
-      "position": [
-        880,
-        624
-      ],
-      "notes": "Analisa o currículo e já gera as 10 perguntas estratégicas.\nO array 'questions' é retornado ao front para exibir o formulário."
+      "position": [752, 32],
+      "notes": "Analisa o currículo e já gera as 10 perguntas estratégicas."
     },
     {
       "parameters": {
-        "model": "llama-3.3-70b-versatile",
+        "model": "=qwen/qwen3-32b",
         "options": {}
       },
-      "id": "9d241665-8f39-404d-b9ea-14d94a47a39f",
+      "id": "77d8a4ec-e393-4a61-a1f4-4accf8e34e6e",
       "name": "Groq Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
-      "position": [
-        752,
-        832
-      ],
+      "position": [720, 240],
       "credentials": {
         "groqApi": {
-          "id": "rNAey3eUeDioukUT",
+          "id": "Zs2d3aQggFKHeg1h",
           "name": "Groq account"
         }
       }
@@ -89,298 +74,93 @@
     {
       "parameters": {
         "sessionIdType": "customKey",
-        "sessionKey": "={{ $('Code - Valida id e binário1').item.json.id }}",
-        "contextWindowLength": 5
+        "sessionKey": "={{ $('Webhook POST /upload-resume').item.json.query.id }}",
+        "contextWindowLength": 2
       },
-      "id": "5c7516ca-bf3d-417a-9125-a3bb0b830ca2",
-      "name": "Simple Memory",
-      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
       "typeVersion": 1.3,
-      "position": [
-        896,
-        832
-      ]
+      "position": [848, 240],
+      "id": "5896202c-fbb9-4f24-a8a3-ad8b5b9638f7",
+      "name": "Postgres Chat Memory",
+      "credentials": {
+        "postgres": {
+          "id": "BgdlaXsBdEjEwstv",
+          "name": "Postgres account"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const resumeId = $('Code - Valida id e binário1').first().json.id;\n\nconst raw = $input.first().json.output\n  || $input.first().json.message?.content\n  || $input.first().json.choices?.[0]?.message?.content;\n\nif (!raw) throw new Error('Resposta do AI Agent vazia. Raw: ' + JSON.stringify($input.first().json));\n\nlet parsed;\ntry {\n  const clean = typeof raw === 'string' ? raw.replace(/```json|```/g, '').trim() : raw;\n  parsed = typeof clean === 'string' ? JSON.parse(clean) : clean;\n} catch(e) {\n  throw new Error('JSON inválido retornado: ' + raw);\n}\n\nreturn [{\n  json: {\n    resume_id: resumeId,\n    employability_score: parsed.employability_score,\n    ats_rejection_chance: parsed.ats_rejection_chance,\n    hook_message: parsed.hook_message,\n    brutal_roast: parsed.brutal_roast,\n    red_flags: JSON.stringify(parsed.red_flags),\n    improvement_tips: JSON.stringify(parsed.improvement_tips),\n    rewritten_summary: parsed.rewritten_summary,\n    questions: JSON.stringify(parsed.questions || []),\n    status: 'analyzed',\n    created_at: new Date().toISOString()\n  }\n}];"
+        "jsCode": "const resumeId = $('Code - Valida id e binário').first().json.id;\n\nconst raw =\n  $input.first().json.output ||\n  $input.first().json.response?.generations?.[0]?.[0]?.text ||\n  $input.first().json.message?.content ||\n  $input.first().json.choices?.[0]?.message?.content;\n\nif (!raw) throw new Error('Resposta vazia: ' + JSON.stringify($input.first().json));\n\n// Remove <think> e markdown\nlet stripped = typeof raw === 'string'\n  ? raw.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim()\n  : raw;\nstripped = stripped.replace(/```json|```/g, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(stripped);\n} catch(e) {\n  const match = stripped.match(/\\{[\\s\\S]*\\}/);\n  if (!match) throw new Error('JSON inválido: ' + stripped.substring(0, 300));\n  parsed = JSON.parse(match[0]);\n}\n\nconst originalText = $('Extract from File - PDF to Text').first().json.text || '';\n\nreturn [{\n  json: {\n    resume_id:            resumeId,\n    employability_score:  parsed.employability_score,\n    ats_rejection_chance: parsed.ats_rejection_chance,\n    hook_message:         parsed.hook_message,\n    brutal_roast:         parsed.brutal_roast,\n    red_flags:            JSON.stringify(parsed.red_flags   || []),\n    improvement_tips:     JSON.stringify(parsed.improvement_tips || []),\n    rewritten_summary:    parsed.rewritten_summary,\n    questions:            JSON.stringify(parsed.questions   || []),\n    original_text:        originalText,\n    status:               'analyzed',\n    created_at:           new Date().toISOString()\n  }\n}];\n"
       },
-      "id": "abb49247-0229-4520-8b89-31e63df29e0a",
-      "name": "Code - Parse e Monta Objeto1",
+      "id": "f182b3e3-ccf0-41c4-be34-f390d232575c",
+      "name": "Code - Parse e Monta Objeto",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1248,
-        624
-      ],
-      "notes": "Faz JSON.parse do response do Groq.\nExtrai também o campo 'questions' para devolver ao front."
+      "position": [1120, 32],
+      "notes": "Faz JSON.parse do response do Groq. Prepara todos os campos para INSERT."
     },
     {
       "parameters": {
-        "dataTableId": {
-          "__rl": true,
-          "value": "ArXE8s9tmJPsI1EC",
-          "mode": "list",
-          "cachedResultName": "resume_roasts",
-          "cachedResultUrl": "/projects/lvog2T4fK6vD8HRh/datatables/ArXE8s9tmJPsI1EC"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "resume_id": "={{ $json.resume_id }}",
-            "employability_score": "={{ $json.employability_score }}",
-            "ats_rejection_chance": "={{ $json.ats_rejection_chance }}",
-            "hook_message": "={{ $json.hook_message }}",
-            "brutal_roast": "={{ $json.brutal_roast }}",
-            "red_flags": "={{ $json.red_flags }}",
-            "improvement_tips": "={{ $json.improvement_tips }}",
-            "rewritten_summary": "={{ $json.rewritten_summary }}",
-            "questions": "={{ $json.questions }}",
-            "status": "={{ $json.status }}",
-            "created_at": "={{ $json.created_at }}"
-          },
-          "matchingColumns": [],
-          "schema": [
-            {
-              "id": "resume_id",
-              "displayName": "resume_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "readOnly": false,
-              "removed": false
-            },
-            {
-              "id": "employability_score",
-              "displayName": "employability_score",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "readOnly": false,
-              "removed": false
-            },
-            {
-              "id": "ats_rejection_chance",
-              "displayName": "ats_rejection_chance",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "readOnly": false,
-              "removed": false
-            },
-            {
-              "id": "hook_message",
-              "displayName": "hook_message",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "readOnly": false,
-              "removed": false
-            },
-            {
-              "id": "brutal_roast",
-              "displayName": "brutal_roast",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "readOnly": false,
-              "removed": false
-            },
-            {
-              "id": "red_flags",
-              "displayName": "red_flags",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "readOnly": false,
-              "removed": false
-            },
-            {
-              "id": "improvement_tips",
-              "displayName": "improvement_tips",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "readOnly": false,
-              "removed": false
-            },
-            {
-              "id": "rewritten_summary",
-              "displayName": "rewritten_summary",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "readOnly": false,
-              "removed": false
-            },
-            {
-              "id": "questions",
-              "displayName": "questions",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "readOnly": false,
-              "removed": false
-            },
-            {
-              "id": "status",
-              "displayName": "status",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "readOnly": false,
-              "removed": false
-            },
-            {
-              "id": "created_at",
-              "displayName": "created_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "readOnly": false,
-              "removed": false
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
+        "operation": "executeQuery",
+        "query": "INSERT INTO resume_roasts (\n  resume_id,\n  source_service,\n  employability_score,\n  ats_rejection_chance,\n  hook_message,\n  brutal_roast,\n  red_flags,\n  improvement_tips,\n  rewritten_summary,\n  questions,\n  original_text,\n  status,\n  created_at\n) VALUES (\n  '{{ $json.resume_id }}',\n  'resume-roast',\n  {{ $json.employability_score }},\n  {{ $json.ats_rejection_chance }},\n  '{{ $json.hook_message.replace(/'/g, \"''\") }}',\n  '{{ $json.brutal_roast.replace(/'/g, \"''\") }}',\n  '{{ $json.red_flags }}'::jsonb,\n  '{{ $json.improvement_tips }}'::jsonb,\n  '{{ $json.rewritten_summary.replace(/'/g, \"''\") }}',\n  '{{ $json.questions }}'::jsonb,\n  '{{ $json.original_text.replace(/'/g, \"''\").substring(0, 50000) }}',\n  'analyzed',\n  NOW()\n)\nON CONFLICT (resume_id)\nDO UPDATE SET\n  employability_score  = EXCLUDED.employability_score,\n  ats_rejection_chance = EXCLUDED.ats_rejection_chance,\n  hook_message         = EXCLUDED.hook_message,\n  brutal_roast         = EXCLUDED.brutal_roast,\n  red_flags            = EXCLUDED.red_flags,\n  improvement_tips     = EXCLUDED.improvement_tips,\n  rewritten_summary    = EXCLUDED.rewritten_summary,\n  questions            = EXCLUDED.questions,\n  original_text        = EXCLUDED.original_text,\n  status               = 'analyzed',\n  updated_at           = NOW()\nRETURNING resume_id, status;",
         "options": {}
       },
-      "id": "6d37eae6-698f-487f-a12b-0670ab63426d",
-      "name": "DataTable - Insert resume_roasts1",
-      "type": "n8n-nodes-base.dataTable",
-      "typeVersion": 1,
-      "position": [
-        1488,
-        624
-      ]
+      "id": "pg-insert-roast",
+      "name": "Postgres - INSERT resume_roasts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1360, 32],
+      "credentials": {
+        "postgres": {
+          "id": "BgdlaXsBdEjEwstv",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "Substitui o DataTable Insert.\nUsa ON CONFLICT para ser idempotente — re-envio do mesmo resume_id não duplica registro."
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({\n  resume_id: $('Code - Parse e Monta Objeto1').first().json.resume_id,\n  employability_score: $('Code - Parse e Monta Objeto1').first().json.employability_score,\n  ats_rejection_chance: $('Code - Parse e Monta Objeto1').first().json.ats_rejection_chance,\n  hook_message: $('Code - Parse e Monta Objeto1').first().json.hook_message,\n  brutal_roast: $('Code - Parse e Monta Objeto1').first().json.brutal_roast,\n  red_flags: JSON.parse($('Code - Parse e Monta Objeto1').first().json.red_flags),\n  improvement_tips: JSON.parse($('Code - Parse e Monta Objeto1').first().json.improvement_tips),\n  rewritten_summary: $('Code - Parse e Monta Objeto1').first().json.rewritten_summary,\n  questions: JSON.parse($('Code - Parse e Monta Objeto1').first().json.questions)\n}) }}",
-        "options": {
-          "responseCode": 200
-        }
+        "responseBody": "={{ JSON.stringify({\n  resume_id:            $('Code - Parse e Monta Objeto').first().json.resume_id,\n  employability_score:  $('Code - Parse e Monta Objeto').first().json.employability_score,\n  ats_rejection_chance: $('Code - Parse e Monta Objeto').first().json.ats_rejection_chance,\n  hook_message:         $('Code - Parse e Monta Objeto').first().json.hook_message,\n  brutal_roast:         $('Code - Parse e Monta Objeto').first().json.brutal_roast,\n  red_flags:            JSON.parse($('Code - Parse e Monta Objeto').first().json.red_flags),\n  improvement_tips:     JSON.parse($('Code - Parse e Monta Objeto').first().json.improvement_tips),\n  rewritten_summary:    $('Code - Parse e Monta Objeto').first().json.rewritten_summary,\n  questions:            JSON.parse($('Code - Parse e Monta Objeto').first().json.questions)\n}) }}",
+        "options": { "responseCode": 200 }
       },
-      "id": "5140f78f-fc7f-400d-a8fb-26ad1cacfc71",
-      "name": "Respond to Webhook - Resultado Completo1",
+      "id": "c89f65ac-fc08-4ff0-9319-07e315de9665",
+      "name": "Respond to Webhook - Resultado Completo",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [
-        1712,
-        624
-      ],
-      "notes": "Retorna análise completa + array questions para o front.\nO front exibe as perguntas, usuário responde e chama POST /gerar-curriculo."
+      "position": [1584, 32],
+      "notes": "Retorna análise completa + array questions para o front."
     }
   ],
   "connections": {
-    "Webhook POST /upload-resume1": {
-      "main": [
-        [
-          {
-            "node": "Code - Valida id e binário1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Webhook POST /upload-resume": {
+      "main": [[{ "node": "Code - Valida id e binário", "type": "main", "index": 0 }]]
     },
-    "Code - Valida id e binário1": {
-      "main": [
-        [
-          {
-            "node": "Extract from File - PDF to Text",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Code - Valida id e binário": {
+      "main": [[{ "node": "Extract from File - PDF to Text", "type": "main", "index": 0 }]]
     },
     "Extract from File - PDF to Text": {
-      "main": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "AI Agent": {
-      "main": [
-        [
-          {
-            "node": "Code - Parse e Monta Objeto1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]]
     },
     "Groq Chat Model": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
+      "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]]
     },
-    "Simple Memory": {
-      "ai_memory": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "ai_memory",
-            "index": 0
-          }
-        ]
-      ]
+    "Postgres Chat Memory": {
+      "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]]
     },
-    "Code - Parse e Monta Objeto1": {
-      "main": [
-        [
-          {
-            "node": "DataTable - Insert resume_roasts1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "AI Agent": {
+      "main": [[{ "node": "Code - Parse e Monta Objeto", "type": "main", "index": 0 }]]
     },
-    "DataTable - Insert resume_roasts1": {
-      "main": [
-        [
-          {
-            "node": "Respond to Webhook - Resultado Completo1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Code - Parse e Monta Objeto": {
+      "main": [[{ "node": "Postgres - INSERT resume_roasts", "type": "main", "index": 0 }]]
+    },
+    "Postgres - INSERT resume_roasts": {
+      "main": [[{ "node": "Respond to Webhook - Resultado Completo", "type": "main", "index": 0 }]]
     }
   },
-  "pinData": {},
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "5c28372f8539d1fc026bc6d1c9263c72b310a93650bd9ed58d2c3834b89e10ae"
-  },
-  "settings": {
-    "executionOrder": "v1"
   }
 }
